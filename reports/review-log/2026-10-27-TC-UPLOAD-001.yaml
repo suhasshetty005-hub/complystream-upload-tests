@@ -1,0 +1,103 @@
+reviewed: 2026-10-27
+test_case: TC-UPLOAD-001
+batch: reports/codegen-batch-2026-10-27-TC-UPLOAD-001.yaml
+verdict: changes_requested
+
+# Reviewer's own runs (2026-10-27): `npm run typecheck` clean; `npm run knowledge` clean (YAML tabs OK,
+# C-LOC-4 traceability OK); `npx playwright test --grep "@tc:TC-UPLOAD-001"` -> 1 passed (3.5s, chromium,
+# the only project). Fixture tests/fixtures/files/sample.txt is committed, 72 bytes, harmless (C-IO-1).
+#
+# Checklist A summary:
+#   A1 self-verification: present and convincing. Pass -> step-5 assertion inverted to 'wrong.txt' -> fail
+#      in the named step with the real toHaveText message -> revert -> pass (C-AGENT-4).
+#   A2 coverage: steps 1-5 each map to an assertion; deviations are explained in the batch report (C-TC-3).
+#   A3 knowledge: every locator, the fakepath value, status 200 and 'sample.txt' trace to upload.yaml.
+#   A4 upload path: the form path via the real filechooser event, armed before the click (C-IO-2, C-IO-3). OK.
+#   A5 conventions: no raw locators in the spec (C-LOC-5), no sleeps (C-WAIT-1), steps wrapped (C-ASSERT-3),
+#      status + page both asserted (C-ASSERT-4), fixture used (C-POM-2). OK.
+#   A6 assertion strength: one blocker (step 4), see findings.
+#   A7 n/a (not a known-defect test).
+# Checklist B summary (knowledge/pages/upload.yaml): every element has a `why` (C-KNOW-3); states
+#   file_chosen_not_submitted and successful_submit were exercised, not read off the page; not_yet_observed
+#   is honest and non-empty (C-KNOW-2); gotchas carry fixes (C-KNOW-4); the 'Choose File' wording is recorded
+#   under doc_discrepancies, not resolved (C-KNOW-5); covered_by and last_observed are current (C-KNOW-6/7).
+#   No knowledge findings.
+
+findings:
+  - severity: blocker
+    file: tests/upload/upload-form.spec.ts
+    line: 32
+    convention_ref: C-ASSERT-1
+    issue: >
+      Step 4 asserts the confirmation only with `expect(uploadPage.resultHeading).toBeVisible()`. The locator
+      is getByRole('heading', { name: 'File Uploaded!', level: 3 }) without `exact: true`, and Playwright
+      matches the accessible name case-insensitively as a substring. The assertion is therefore the
+      toContainText-on-a-fragment pattern C-ASSERT-1 forbids. The knowledge file records the exact heading
+      text 'File Uploaded!' (elements.result_heading, states.successful_submit).
+    why_it_matters: >
+      It would also pass on any level-3 heading that contains 'file uploaded!' in any case, e.g. 'File
+      uploaded! (0 bytes stored)' or 'File Uploaded! ... but processing failed'. This is the core outcome
+      the user sees, so a loose check here is a correctness bug (Checklist A6).
+    fix: "await expect(uploadPage.resultHeading).toHaveText('File Uploaded!');"
+
+  - severity: suggestion
+    file: tests/upload/upload-form.spec.ts
+    line: 10
+    convention_ref: C-ASSERT-1
+    issue: >
+      Step 1 has the same substring/case-insensitive role-name match on the 'File Uploader' heading, and
+      only toBeVisible() is asserted. It is lower stakes than step 4 because this is a precondition-style check.
+    why_it_matters: "A heading such as 'File Uploader (disabled)' would still pass step 1."
+    fix: "await expect(uploadPage.heading).toHaveText('File Uploader');"
+
+  - severity: suggestion
+    file: tests/upload/upload-form.spec.ts
+    line: 28
+    convention_ref: C-TC-1
+    issue: >
+      Step 3 asserts `toBe(200)` where the test case's expected result is '2xx'. The batch report gives the
+      reason as 'knowledge wins'. That misreads C-TC-1: the knowledge file defines how the page *behaves*,
+      and the test case alone defines *what* is tested. The two do not disagree here, because 200 is a 2xx,
+      so knowledge does not override anything. Asserting exactly 200 adds a requirement the test case does
+      not make. A server change to 201/204 would fail this test even though TC-UPLOAD-001 still passes.
+    why_it_matters: >
+      Not a false pass (the stricter check cannot let a regression through), so this is not a blocker. But
+      'knowledge wins' should not become precedent for tightening test-case requirements.
+    fix: >
+      Assert what the test case specifies, e.g.
+      `expect(response.status(), 'POST /upload status').toBeGreaterThanOrEqual(200);` plus
+      `.toBeLessThan(300)`, or `expect(response.ok(), ...).toBe(true)` with the status in the message.
+      Keep the comment that 200 was observed. If exact 200 is really wanted, raise it with Doc-Gap and do not
+      decide it in the spec.
+
+  - severity: suggestion
+    file: tests/upload/upload-form.spec.ts
+    line: 22
+    convention_ref: "none - rubric gap (see conventions_silent_on); related: C-ASSERT-2, C-WAIT-2"
+    issue: >
+      Codegen asked whether the step-2 'nothing sent' check is sound. It is sound as far as it goes. It is
+      paired with presence assertions (input value at line 19, heading at line 21), which satisfies C-ASSERT-2.
+      The counter filters to POST /upload, so the Optimizely beacons in knowledge gotchas cannot affect it.
+      The listener is attached before the action. Its weakness is the one the batch report already admits:
+      it reads the count once, right after the value assertion settles, so a POST fired late by choosing a
+      file would be missed. C-WAIT-2's 'snapshot taken too early' concern applies, though no web-first
+      equivalent exists for an absence.
+    why_it_matters: >
+      The 'nothing sent yet' half of step 2 would not catch a regression where choosing a file
+      auto-submits after a short delay (e.g. a Dropzone-style auto-upload), which is exactly the
+      regression it exists to catch.
+    fix: >
+      Keep line 22 and close the window at no extra cost: after `uploadPage.submit()` in step 3, add
+      `expect(uploadPosts(), 'POST /upload requests in total (choose + submit)').toBe(1);`. Hoist
+      `uploadPosts` above the step-2 block so step 3 can read it. Any late POST from choosing the file
+      then shows up as a count of 2.
+
+conventions_silent_on:
+  - "How to assert that an action sent NO request (a counter read once vs. a counter re-checked after a later known request vs. a negative waitForRequest with a timeout). The last risks conflicting with C-WAIT-1 in spirit. Raised by Codegen and confirmed by the reviewer; a human should decide whether to add a rule."
+  - "Whether a page object may hold non-locator helpers such as a request counter (pages/UploadPage.ts:69-75). C-POM-3 only rules on locators being readonly and on expect; it neither allows nor forbids this. The reviewer raises no finding. C-POM-1 (intent-named methods) is arguably strained by the mechanical name trackUploadPosts. Whether such helpers belong in the page object or in a fixture in tests/fixtures/index.ts is for a human to decide."
+  - "Listener lifecycle: trackUploadPosts() adds a page.on('request') listener that is never removed (pages/UploadPage.ts:71). That is harmless in a one-page-per-test setup, but the rubric does not say whether helpers must clean up."
+  - "Whether getByRole locators in pages/ and knowledge must use `exact: true` when the name is a fixed string. C-ASSERT-1 covers assertions, not locator matching semantics. The step-4 blocker is raised under C-ASSERT-1 because the spec relies on the locator's name match as its only text check."
+  - "Whether a status assertion may be stricter than the test case's stated range (step 3). C-TC-1 governs disagreements, but this is a narrowing, not a disagreement."
+  - "knowledge first_load_ms: no convention says what it is for or who consumes it. It is recorded honestly (with the cold-start caveat in not_yet_observed), so it is not a finding."
+
+meta_signal: "None yet: this is the first review log, so no rule has been raised in more than two reviews. Watch for C-ASSERT-1 via role-name substring matching (toBeVisible on a named getByRole). If it recurs, the Codegen prompt should say 'assert text with toHaveText, not via a locator's name'."

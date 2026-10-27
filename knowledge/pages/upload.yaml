@@ -1,0 +1,121 @@
+# Observed with Playwright MCP on 2026-10-27 by the Explorer agent (scope: TC-UPLOAD-001).
+# First session: browser_file_upload refused the fixture (the MCP allowed roots pointed at another
+# project). Second session, the same day and run from this repo: browser_file_upload accepted
+# C:\Users\suhas\complystream-upload-tests\tests\fixtures\files\sample.txt, and the file-chosen
+# and successful-submit states were observed. Drag-and-drop is still unobserved (out of scope).
+
+page: upload
+title: File Uploader
+url: /upload
+last_observed: 2026-10-27
+observed_on: "https://the-internet.herokuapp.com (no version string visible; footer says 'Powered by Elemental Selenium and Sauce Labs')"
+first_load_ms: 2823  # The largest first load seen. Navigation Timing duration of the first GET /upload in the second session (responseStart 776 ms, 200). The first session measured 865 ms (responseStart 708 ms). Whether either hit a cold dyno is unknown, so this is not a confirmed cold-start figure.
+
+elements:
+  - name: heading
+    locator: "page.getByRole('heading', { name: 'File Uploader', level: 3 })"
+    why: "Snapshot shows heading \"File Uploader\" [level=3]; role + name is the first choice (C-LOC-1)."
+    attributes: "<h3> with no attributes"
+    notes: "The empty-submit error page and the success page reuse the same h3 position with different text ('Internal Server Error' / 'File Uploaded!'), so assert the name, not just the role."
+
+  - name: file_input
+    locator: "page.locator('#file-upload')"
+    why: "Snapshot exposes it only as button \"Choose File\". That is the browser's native button text, not an author-supplied name, and there are 0 <label> elements on the page. Fall back to the stable DOM id (C-LOC-2)."
+    attributes: 'id="file-upload" type="file" name="file" (no accept, no multiple)'
+    notes: "There are TWO input[type=file] on the page. Use '#file-upload'. A bare 'input[type=file]' matches both and triggers a strict-mode violation (see gotchas). After sample.txt is chosen, the snapshot still shows button \"Choose File\"; the chosen file name appears only as native text beside it (screenshot)."
+
+  - name: upload_button
+    locator: "page.getByRole('button', { name: 'Upload' })"
+    why: "Snapshot shows button \"Upload\". Playwright MCP itself generated this locator when clicked (C-LOC-1)."
+    attributes: 'class="button" id="file-submit" type="submit" value="Upload"'
+    notes: "#file-submit is a stable fallback."
+
+  - name: upload_form
+    locator: "page.locator('form')"
+    why: "No role or name in the snapshot. The page has exactly 1 <form>. Only needed if a test inspects form attributes."
+    attributes: 'method="POST" enctype="multipart/form-data" (no action attribute, so it submits to the document URL, /upload)'
+    notes: "Both the empty submit and the successful submit were observed going to POST https://the-internet.herokuapp.com/upload."
+
+  - name: drag_drop_zone
+    locator: "page.locator('#drag-drop-upload')"
+    why: "Absent from the accessibility snapshot (an empty div with no role or name), so role-based location is impossible. Fall back to the DOM id (C-LOC-2)."
+    attributes: 'id="drag-drop-upload" class="dz-success-mark dz-clickable"; outerHTML is an empty div; 400x400 px at x=316, y=358 in a 1600-wide viewport'
+    notes: "Renders as an empty box with a red dashed border below the Upload button. The 'dz-' classes indicate a Dropzone-style widget; its behaviour on drop was NOT observed."
+
+  - name: dropzone_hidden_input
+    locator: "page.locator('input.dz-hidden-input')"
+    why: "Recorded so nobody targets it by accident. Has no id. The class is the only distinguishing attribute."
+    attributes: 'type="file" multiple="multiple" class="dz-hidden-input" style="visibility: hidden; position: absolute; top: 0px; left: 0px; height: 0px; width: 0px;"'
+    notes: "A direct child of <body>, outside the <form>. Not part of the file-picker flow. It still had files.length 0 after sample.txt was chosen through #file-upload."
+
+  - name: result_heading
+    locator: "page.getByRole('heading', { name: 'File Uploaded!', level: 3 })"
+    why: "Snapshot of the result page shows heading \"File Uploaded!\" [level=3]; role + name is the first choice (C-LOC-1)."
+    attributes: "<h3>File Uploaded!</h3> with no attributes; it is the only h1-h4 on the result page"
+    notes: "Only present after a successful submit. The URL is still /upload, so this heading together with the POST status is what identifies the result page."
+
+  - name: uploaded_files
+    locator: "page.locator('#uploaded-files')"
+    why: "The snapshot shows it only as an unnamed 'generic' with the text sample.txt, so it has no role or accessible name to target (C-LOC-1 not possible). It has a stable id, so fall back to the DOM id (C-LOC-2)."
+    attributes: 'id="uploaded-files" class="panel text-center"; 0 child elements; text node only'
+    notes: "textContent is JSON \"\\n    sample.txt\\n  \" (newline + 4 spaces before, newline + 2 spaces after); innerText is exactly 'sample.txt'. No other file names are present. Raw textContent equality fails; use toHaveText('sample.txt'), which normalises whitespace, or trim first. Only present after a successful submit."
+
+  - name: empty_submit_back_link
+    locator: "page.getByRole('link', { name: 'Back to the File Uploader' })"
+    why: "Snapshot shows link \"Back to the File Uploader\" (/url: /upload) on the empty-submit error page (C-LOC-1)."
+    attributes: 'href="/upload"'
+    notes: "Only present on the error page after an empty submit. NOT present on the success page."
+
+states:
+  - name: initial
+    trigger: "GET /upload"
+    request: "GET /upload -> 200"
+    observed: "Page title 'The Internet'. Heading 'File Uploader' (h3). Paragraph 'Choose a file on your system and then click upload. Or, drag and drop a file into the area below.' Button 'Choose File' with native text 'No file chosen' beside it (visible in the screenshot, not in the snapshot). Button 'Upload'. An empty red-dashed drop zone below. #uploaded-files is NOT present."
+
+  - name: file_chooser_opened_and_cancelled
+    trigger: "Click 'Choose File', then cancel the file chooser without selecting a file"
+    request: "none (no request to the-internet.herokuapp.com between the chooser opening and the cancel)"
+    observed: "The click opens a native file chooser (Playwright modal state 'File chooser'). After cancelling, #file-upload has files.length 0 and value '', and the URL stays https://the-internet.herokuapp.com/upload."
+
+  - name: file_chosen_not_submitted
+    trigger: "Click 'Choose File', then set tests/fixtures/files/sample.txt in the file chooser"
+    request: "none to the-internet.herokuapp.com. The only new request was a failed third-party Optimizely beacon (GET https://298279967.log.optimizely.com/event?...&n=engagement&... -> net::ERR_NAME_NOT_RESOLVED)."
+    observed: "URL stays https://the-internet.herokuapp.com/upload. #file-upload has files.length 1 (name 'sample.txt', size 72, type 'text/plain') and value 'C:\\fakepath\\sample.txt'. The native text beside 'Choose File' changes from 'No file chosen' to 'sample.txt' (screenshot only, not in the snapshot). input.dz-hidden-input has files.length 0. Nothing else on the page changes."
+
+  - name: successful_submit
+    trigger: "With sample.txt chosen, click 'Upload'"
+    request: "POST https://the-internet.herokuapp.com/upload -> 200 (full-page form submit; the new document's Navigation Timing entry has type 'navigate', responseStatus 200, duration 297 ms)"
+    observed: "URL after submit is https://the-internet.herokuapp.com/upload (unchanged). Page title 'The Internet'. #content holds only <div class=\"example\"> containing <h3>File Uploaded!</h3> and <div id=\"uploaded-files\" class=\"panel text-center\">, whose innerText is exactly 'sample.txt' (textContent has surrounding template whitespace; see elements.uploaded_files). No other file names. No other upload-related elements: 0 input[type=file], 0 <form>, no #drag-drop-upload, no Upload button, no back link."
+
+  - name: empty_submit
+    trigger: "Click 'Upload' with no file chosen"
+    request: "POST https://the-internet.herokuapp.com/upload -> 500"
+    observed: "URL stays https://the-internet.herokuapp.com/upload. Page title 'The Internet'. h3 heading 'Internal Server Error'. Paragraph 'No file was chosen. Please choose a file to upload.' Link 'Back to the File Uploader' (href /upload), which returns to the initial state."
+
+  - name: drag_drop
+    trigger: "Drop a file onto #drag-drop-upload"
+    request: "NOT YET OBSERVED"
+    observed: "NOT YET OBSERVED (only the zone's static appearance was observed; see elements.drag_drop_zone)"
+
+gotchas:
+  - "Two file inputs exist: '#file-upload' (in the form) and a hidden Dropzone 'input.dz-hidden-input' (multiple, outside the form, under <body>). 'input[type=file]' matches both. Always use '#file-upload' for the picker flow."
+  - "The file input's snapshot name 'Choose File' is the browser's native button label, not author markup (0 <label> elements). It may differ across browsers or locales, so locate by '#file-upload', not by getByRole('button', { name: 'Choose File' })."
+  - "An empty submit returns HTTP 500, not a 4xx or an inline validation message. A test asserting only the page text would miss the 500, and a test asserting only status would miss the message. Assert both."
+  - "Success and failure both end on URL /upload (POST /upload -> 200 vs -> 500). A URL assertion proves nothing. Assert the POST /upload response status plus the 'File Uploaded!' heading."
+  - "#uploaded-files textContent includes template whitespace around 'sample.txt'. Use toHaveText('sample.txt'), which normalises whitespace, or trim before an exact comparison. Do not compare raw textContent."
+  - "The success page has no link back to the form and no file input. A test that uploads twice must navigate to /upload again."
+  - "The drop zone and the 'No file chosen' / chosen-file-name text do not appear in the accessibility snapshot. Use the DOM (#file-upload files) or screenshots for them."
+  - "Third-party Optimizely beacons (https://298279967.log.optimizely.com/event...) fail with net::ERR_NAME_NOT_RESOLVED on every page load and also on interaction (an 'engagement' beacon fired around choosing the file), plus /favicon.ico -> 404. These are console errors unrelated to the upload. Filter network assertions to the-internet.herokuapp.com/upload, and filter console errors before failing a test on them."
+
+doc_discrepancies:
+  - "Empty submit: the server answers HTTP 500 with heading 'Internal Server Error', yet the body text 'No file was chosen. Please choose a file to upload.' is a user validation message. A user would reasonably expect a validation response (inline or 4xx), not a server error. Recorded, not resolved."
+  - "TC-UPLOAD-001 step 1 calls the file chooser 'Choose File'. That label is the native browser button text, not page markup (no <label>, no aria-label), so the test case's wording depends on the browser."
+
+not_yet_observed:
+  - "The POST /upload request body and response headers on a successful submit (only method, URL and status were recorded)."
+  - "Drag-and-drop: what happens on drop, whether it sends a request by itself or needs the Upload button, and what it displays."
+  - "Behaviour with multiple files, large files, or restricted types: out of scope, and no such fixtures are committed."
+  - "A confirmed cold-start load time. First loads of 865 ms and 2823 ms were seen; either may have hit an already-warm dyno."
+
+covered_by:
+  - "tests/upload/upload-form.spec.ts (TC-UPLOAD-001)"

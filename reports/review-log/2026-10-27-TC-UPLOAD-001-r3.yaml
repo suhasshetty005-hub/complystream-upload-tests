@@ -1,0 +1,139 @@
+reviewed: 2026-10-27
+test_case: TC-UPLOAD-001
+batch: reports/codegen-batch-2026-10-27-TC-UPLOAD-001.yaml
+round: 3
+previous_logs:
+  - reports/review-log/2026-10-27-TC-UPLOAD-001.yaml
+  - reports/review-log/2026-10-27-TC-UPLOAD-001-r2.yaml
+verdict: changes_requested
+
+# Scope: the whole batch (pages/UploadPage.ts, tests/fixtures/index.ts, tests/upload/upload-form.spec.ts)
+# is reviewed again against the UPDATED rubric: new C-ASSERT-5, new C-POM-5, and the clarified C-ASSERT-1.
+# The repo has no commits (everything is untracked), so `git diff` is empty. All three files were re-read
+# in full. This round only the spec changed (fix_rounds[1]). The page object and fixture are unchanged.
+#
+# Reviewer's own runs (2026-10-27): `npm run typecheck` clean; `npm run knowledge` clean (YAML tabs OK,
+# C-LOC-4 traceability OK); `npx playwright test --grep "@tc:TC-UPLOAD-001"` -> 1 passed (3.5s, chromium).
+#
+# Fix-round 2 self-verification (C-AGENT-4): present and convincing. Each of the three changes was inverted
+# separately, and each run reports the real failure message in the right step: step 1 toHaveText
+# 'File Uploader (disabled)'; step 3 lower bound 201 vs received 200; total count 2 vs received 1. All three
+# were then reverted and the test passed. The three round-1 suggestions are applied as the reviewer worded them.
+#
+# Updated-rule check:
+#   C-ASSERT-5 (no request sent): mostly met. The counter starts before the action (spec:17, before
+#     chooseFile at :20). It asserts 0 at that point (:25) and asserts the running total of 1 after submit,
+#     the later action known to send a request (:35). No negative waitForRequest is used. NOT met: the
+#     filter is method + PATHNAME, not the exact URL (UploadPage.ts:72). See blocker 2. Round 1 accepted
+#     the pathname filter because no rule existed then. The human has since written "exact method and URL",
+#     so applying that rule now is not re-litigation.
+#   C-POM-5 (observation helpers): trackUploadPosts returns a value and never asserts (OK under C-POM-3),
+#     but its page.on('request') listener is never removed. It returns no disposer, and the fixture has no
+#     teardown. See blocker 1. This is the leak the round-1 log recorded as a rubric gap. It is now a rule.
+#   C-ASSERT-1 (clarified): the core outcomes are exact. Step 1 heading (:10), step 4 (:39) and step 5 (:44)
+#     use toHaveText. Steps 2-3 use toHaveValue and status range checks, and there are two remaining
+#     toBeVisible-on-a-named-locator checks (:12, :24). Neither is the core outcome of TC-UPLOAD-001 (upload
+#     succeeds, confirmation, exact file name). So they are suggestions, consistent with how round 1
+#     graded the step-1 heading ("precondition-style").
+#
+# Other Checklist A items: A2 coverage unchanged and complete (C-TC-3). A3: every locator and string traces
+# to upload.yaml. A4: the upload path is the form path via a real filechooser (C-IO-3). A5: no raw locators
+# in the spec (C-LOC-5), no sleeps (C-WAIT-1), steps wrapped (C-ASSERT-3), status + page asserted (C-ASSERT-4),
+# fixture used (C-POM-2), committed fixture (C-IO-1). A7: n/a.
+# Checklist B: no knowledge change this round. The round-1 result (no findings) stands. covered_by and
+# last_observed are current (C-KNOW-6/7).
+
+findings:
+  - severity: blocker
+    file: pages/UploadPage.ts
+    line: 71
+    convention_ref: C-POM-5
+    issue: >
+      trackUploadPosts() adds `this.page.on('request', ...)` and never removes it. The helper returns only
+      `() => count`, with no disposer. tests/fixtures/index.ts:15-17 has no teardown after `use(...)` that
+      would remove it either. C-POM-5 requires one or the other.
+    why_it_matters: >
+      The listener outlives the check it serves. Today the page is per-test, so the leak is bounded, but any
+      second call (another test step, a future multi-upload case, a shared page) stacks listeners that keep
+      counting. The rule exists so that helpers cannot leak silently.
+    fix: >
+      Return a disposer from the helper, e.g.
+      `trackUploadPosts(): { count: () => number; dispose: () => void }` with
+      `const onRequest = (req: Request) => { ... }; this.page.on('request', onRequest);
+      return { count: () => count, dispose: () => this.page.off('request', onRequest) };`.
+      In the spec, call `uploadPosts.dispose()` after the step-3 total check (:35), ideally in a
+      try/finally so the listener is removed on failure too. Alternatively, have the fixture remove
+      registered listeners after `await use(...)`. Either option satisfies C-POM-5. Pick one and do not add both (C-POM-4).
+
+  - severity: blocker
+    file: pages/UploadPage.ts
+    line: 72
+    convention_ref: C-ASSERT-5
+    issue: >
+      The counter filters to `req.method() === 'POST' && new URL(req.url()).pathname === '/upload'`, which
+      matches a POST to /upload on ANY origin. C-ASSERT-5 requires filtering to the exact method AND URL.
+      The knowledge gotcha also says to filter network assertions to the-internet.herokuapp.com/upload.
+    why_it_matters: >
+      A third-party POST whose path is /upload (an analytics or uploader SDK on another host) would be
+      counted, which is exactly what the rule's "so third-party beacons can't affect it" clause rules out.
+      The effect here is a false failure, not a false pass (an extra count turns 0 into 1 or 1 into 2), so
+      the practical risk is low. But the rule states the filter explicitly, and the fix costs one line.
+    fix: >
+      Pin the full URL. The app origin comes from the configurable baseURL (BASE_URL env), so do not
+      hard-code it. Capture it when the helper starts (the page is already on /upload at spec:17):
+      `const target = new URL('/upload', this.page.url()).href;` and then
+      `if (req.method() === 'POST' && req.url() === target) count++;`.
+
+  - severity: suggestion
+    file: pages/UploadPage.ts
+    line: 58
+    convention_ref: C-POM-4
+    issue: >
+      submit() has its own copy of the same pathname-only POST /upload predicate. Once blocker 2 tightens
+      the counter, the page object would contain two different definitions of "the upload request".
+    why_it_matters: "Two ways of identifying one request will drift. The status check and the count could then be looking at different requests."
+    fix: "Extract one private predicate, e.g. `private isUploadPost(req: Request): boolean` (method POST + exact URL), and use it in both submit() (`r => this.isUploadPost(r.request())`) and trackUploadPosts()."
+
+  - severity: suggestion
+    file: tests/upload/upload-form.spec.ts
+    line: 12
+    convention_ref: C-ASSERT-1
+    issue: >
+      Step 1's expected result includes "an Upload button", but it is checked only with toBeVisible() on
+      getByRole('button', { name: 'Upload' }). That name match is a loose substring match, so a button named
+      'Upload disabled' or 'Uploading...' would pass. The clarified C-ASSERT-1 says exactness lives in the
+      assertion. This is a step-1 precondition rather than the test case's core outcome, so it is a suggestion
+      (the same grading round 1 gave the step-1 heading).
+    why_it_matters: "Step 1 would not notice the button being renamed or relabelled."
+    fix: >
+      The element is <input type="submit" value="Upload"> (knowledge elements.upload_button), so it has no
+      text content for toHaveText to check. Use `await expect(uploadPage.uploadButton).toHaveAccessibleName('Upload');`
+      (what a user or screen reader perceives), or `toHaveValue('Upload')`, which traces to the recorded attribute.
+
+  - severity: suggestion
+    file: tests/upload/upload-form.spec.ts
+    line: 24
+    convention_ref: C-ASSERT-1
+    issue: >
+      The step-2 presence half of the C-ASSERT-2 pair is `expect(uploadPage.heading).toBeVisible()`, which is
+      toBeVisible on a named locator alone. It is a supporting check, not a core outcome. Step 1 (:10) already
+      checks the same heading with toHaveText.
+    why_it_matters: "A low-stakes inconsistency: one locator is checked two different ways in consecutive steps."
+    fix: "await expect(uploadPage.heading).toHaveText('File Uploader');"
+
+conventions_silent_on:
+  - "C-POM-5 permits the disposer to be returned by the helper or removal in fixture teardown, but it does not say whether a spec must call a returned disposer on the failure path too (try/finally) or whether only the happy path counts. The blocker-1 fix recommends try/finally, but no rule requires it."
+  - "C-ASSERT-5 says 'exact method and URL' but does not say how a page object should get the app origin when baseURL is configurable (BASE_URL). The fix above derives it from page.url(). A human may prefer a documented approach."
+  - "C-ASSERT-1 says 'a core outcome is checked with toHaveText' but does not define 'core outcome' (every expected result in the test case, or only the scenario's main outcome). This log treats step-1 preconditions and supporting presence checks as non-core (suggestions), consistent with round 1. A human may want to make that explicit."
+  - "C-ASSERT-1 names toHaveText, but toHaveText cannot check an <input type=submit> (no text content). The rubric does not name the equivalent exact assertion (toHaveAccessibleName / toHaveValue) for such elements."
+  - "Carried, still open: batch-report `status` vs scenario-map `status` naming (round 2); `exact: true` on fixed-name locators (now partly settled by the clarified C-ASSERT-1, which leaves locators loose); the purpose of first_load_ms."
+
+meta_signal: >
+  C-ASSERT-1 has now been raised in 2 review logs (round 1: blocker :32 + suggestion :10; round 3: suggestions
+  :12, :24). That is not yet MORE than two (C-AGENT-9), but one more will cross the threshold. The pattern is
+  the same each time: toBeVisible on a named getByRole standing in for a text check. Add a line to the Codegen
+  prompt now ("check named elements with toHaveText / toHaveAccessibleName, never toBeVisible alone") rather
+  than waiting for a third occurrence. Both new blockers come from rules the human just added to cover gaps
+  that round 1 escalated (listener lifecycle, how to assert that no request was sent). The escalation loop
+  worked as intended. The Codegen prompt should cite C-POM-5 and C-ASSERT-5 so the next batch is written to
+  them from the start.

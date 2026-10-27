@@ -1,0 +1,48 @@
+# KNOWLEDGE FILE SCHEMA. Copy this when documenting a new page.
+#
+# This file records how ONE page behaves, as observed. It is not code, a test plan or prose.
+# The Explorer agent writes it. The Codegen agent reads it and may not use anything that is not
+# recorded here (C-AGENT-1).
+#
+# THE ONE RULE: every line traces to something someone actually saw. If you cannot cite an
+# observation, write `NOT YET OBSERVED`. Recording what you don't know stops people inventing
+# assertions.
+
+page: <kebab-case-id>                  # matches the filename
+title: <what the page calls itself>
+url: <path, e.g. /upload>
+last_observed: YYYY-MM-DD
+observed_on: <host, plus anything version-like you can see>
+first_load_ms: <cold-start time observed, sets the suite's timeouts>
+
+# One entry per element a test needs to address.
+# `locator` is the exact Playwright locator. `why` explains the CHOICE (C-KNOW-3).
+elements:
+  - name: <snake_case_handle>
+    locator: "<exact Playwright locator>"
+    why: "<why this strategy, citing the snapshot or attribute you saw>"
+    attributes: "<verbatim DOM attributes that matter: type, name, accept, multiple>"
+    notes: "<anything that bites>"
+
+# What the page DOES: exact strings, status codes and timings.
+states:
+  - name: <snake_case>
+    trigger: "<the action>"
+    request: "<METHOD path -> status>, or 'none'"
+    observed: "<exact outcome, exact strings>"
+
+# Facts that cost someone time, plus the fix. The most valuable section.
+gotchas:
+  - "<the trap, and what to do instead>"
+
+# Where the page contradicts itself or a reasonable expectation. RECORD, do not resolve.
+doc_discrepancies:
+  - "<what disagrees with what>"
+
+# Known unknowns. Stops the next person assuming we checked.
+not_yet_observed:
+  - "<what has never been exercised>"
+
+# Which tests depend on this page (C-KNOW-6).
+covered_by:
+  - "<spec file :: test title>"

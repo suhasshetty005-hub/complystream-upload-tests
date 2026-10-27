@@ -1,0 +1,21 @@
+# SCENARIO MAP: one row per test case, and the pipeline's state machine.
+#
+# status: not_started | explored | in_progress | in_review | done | blocked
+#   explored = a knowledge file covers every step; ready for Codegen
+#   blocked  = cannot proceed; `blocker` must say why, in full
+#
+# /pw-automate adds rows. Codegen updates `status` and `files`.
+
+meta:
+  project: complystream-upload-tests
+  app: https://the-internet.herokuapp.com/upload
+
+scenarios:
+  - id: TC-UPLOAD-001
+    title: Upload a valid file using the file picker
+    page: pages/upload
+    status: done
+    files:
+      - pages/UploadPage.ts
+      - tests/fixtures/index.ts
+      - tests/upload/upload-form.spec.ts

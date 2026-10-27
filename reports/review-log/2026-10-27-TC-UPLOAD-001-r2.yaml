@@ -1,0 +1,65 @@
+reviewed: 2026-10-27
+test_case: TC-UPLOAD-001
+batch: reports/codegen-batch-2026-10-27-TC-UPLOAD-001.yaml
+round: 2
+previous_log: reports/review-log/2026-10-27-TC-UPLOAD-001.yaml
+verdict: approved
+
+# Scope: re-review after fix round 1 (batch report fix_rounds[0]). The whole repo is untracked (no commits),
+# so `git diff` shows nothing. The batch files were re-read in full instead. Compared with the round-1 log,
+# the only code change is tests/upload/upload-form.spec.ts:32. pages/UploadPage.ts and tests/fixtures/index.ts
+# are unchanged from what round 1 describes. No knowledge file changed in this round.
+#
+# Reviewer's own runs (2026-10-27): `npm run typecheck` clean; `npm run knowledge` clean (YAML tabs OK,
+# C-LOC-4 traceability OK); `npx playwright test --grep "@tc:TC-UPLOAD-001"` -> 1 passed (3.2s, chromium);
+# `--list --grep @tc:TC-UPLOAD-001` selects exactly 1 test (C-TC-2).
+#
+# Blocker 1 (round 1, C-ASSERT-1, upload-form.spec.ts:32): RESOLVED. Line 32 is now
+#   `await expect(uploadPage.resultHeading).toHaveText('File Uploaded!');`
+# toHaveText with a string is a full-value, case-sensitive match (whitespace normalised), and it matches
+# the exact heading text the knowledge file records (elements.result_heading, states.successful_submit).
+# A heading such as 'File uploaded! (0 bytes stored)' now fails.
+#
+# Fix-round self-verification (C-AGENT-4): present and convincing. Pass -> step-4 assertion inverted to
+# 'File Uploaded' (no '!') -> failed in step 4 with the real toHaveText message
+# (Expected "File Uploaded", Received "File Uploaded!") -> revert -> pass. Inverting to a value that the
+# substring-matching locator still resolves is a good choice: it proves the new assertion, and not the
+# locator, does the checking. Gates were recorded as clean, and the reviewer's own runs agree.
+#
+# Regression check on the fix: the change is a single line. It adds no locator, no sleep (C-WAIT-1) and no raw
+# locator in the spec (C-LOC-5), and it stays web-first (C-WAIT-2) inside its test.step (C-ASSERT-3).
+# Step 3's status check (C-ASSERT-4) and step 5 are untouched. Nothing new introduced.
+#
+# Round-1 suggestions: deliberately not applied (batch report fix_rounds[0].not_applied) and going to
+# the human. Nothing they touch changed, so they are NOT re-raised or escalated here (no re-litigation).
+# They remain open as written in the round-1 log, and their line numbers are still accurate:
+#   - upload-form.spec.ts:10  C-ASSERT-1  step 1 heading checked only via toBeVisible on a substring role name
+#   - upload-form.spec.ts:28  C-TC-1      toBe(200) narrows the test case's '2xx' ("knowledge wins" wording
+#                                         is still in the batch report, deviations_and_notes[0])
+#   - upload-form.spec.ts:22  rubric gap  step-2 "nothing sent" counter is a single snapshot
+#
+# Inconsistency check requested by the orchestrator: batch report top-level `status: done` vs
+# knowledge/scenario-map.yaml TC-UPLOAD-001 `status: in_review`.
+#   Both are correct for what each field means, so this is not a finding.
+#   - The batch report's `status` is the Codegen batch outcome. agents/codegen-agent.md's output template
+#     uses `status: done` (vs `blocked: needs_exploration`, C-AGENT-2). Its constraint "never mark a test
+#     done without self-verification" is met, because self-verification is present for the original batch
+#     and for fix round 1.
+#   - The scenario-map `status` is the pipeline state machine. `in_review` is right while review is still
+#     open. .claude/commands/pw-automate.md Stage 6 step 3 sets `done` only after the final gates, and
+#     the batch report's knowledge_updated line records the explored -> in_review move honestly.
+#   The two fields share a name and the vocabulary word `done` but mean different things. That is a
+#   naming hazard (a reader may think the scenario is finished), and the rubric says nothing about it.
+#   It is recorded under conventions_silent_on. Action for the orchestrator: set scenario-map
+#   status to `done` at Stage 6 after the final gates pass. Do not set it here.
+#
+# Checklist B: no knowledge file changed in this round, and the round-1 Checklist B result (no findings)
+# stands. covered_by and last_observed are still current (C-KNOW-6/7).
+
+findings: []   # No new blockers or suggestions. Round-1 suggestions stay open, unchanged (see above).
+
+conventions_silent_on:
+  - "Batch-report `status` vs scenario-map `status`: the two fields share a name and the value `done` with different meanings (Codegen batch outcome vs pipeline state). Today the batch report says `done` while the scenario map correctly says `in_review`. No rule defines the batch-report status vocabulary or says how it relates to the scenario map. A human may want to rename one (e.g. `codegen_status`) or document the relationship in docs/framework-conventions.md or agents/codegen-agent.md."
+  - "Carried from round 1 and still open for a human decision: asserting that no request was sent; non-locator helpers in page objects; listener cleanup; `exact: true` on fixed-name getByRole locators; status assertions stricter than the test case's range; the purpose of first_load_ms."
+
+meta_signal: "C-ASSERT-1 has now been raised in 1 review log (round 1: blocker at :32 plus suggestion at :10). This round re-raises nothing, so the count does not reach the 'more than two reviews' threshold (C-AGENT-9). The round-1 watch item still applies: the role-name substring pattern (toBeVisible on a named getByRole standing in for a text check) caused the only blocker. If it recurs in another batch, add 'assert text with toHaveText, not via a locator's name' to the Codegen prompt."

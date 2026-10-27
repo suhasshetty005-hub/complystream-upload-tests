@@ -1,0 +1,22 @@
+{
+  "name": "complystream-upload-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright + TypeScript tests for the-internet.herokuapp.com/upload, written by a four-agent Claude Code pipeline",
+  "type": "commonjs",
+  "scripts": {
+    "pretest": "playwright install chromium",
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:passing": "playwright test --grep-invert @known-defect",
+    "report": "playwright show-report",
+    "typecheck": "tsc --noEmit",
+    "knowledge": "node scripts/check-knowledge.mjs",
+    "check": "npm run typecheck && npm run knowledge"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.1",
+    "typescript": "^5.9.3"
+  }
+}

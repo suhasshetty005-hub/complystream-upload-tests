@@ -1,0 +1,93 @@
+reviewed: 2026-10-27
+test_case: TC-UPLOAD-001
+batch: reports/codegen-batch-2026-10-27-TC-UPLOAD-001.yaml
+round: 4
+previous_logs:
+  - reports/review-log/2026-10-27-TC-UPLOAD-001.yaml
+  - reports/review-log/2026-10-27-TC-UPLOAD-001-r2.yaml
+  - reports/review-log/2026-10-27-TC-UPLOAD-001-r3.yaml
+verdict: approved
+
+# Scope: re-review after fix round 3 (batch report fix_rounds[2]). The repo has no commits, so `git diff`
+# is empty. pages/UploadPage.ts, tests/upload/upload-form.spec.ts, tests/fixtures/index.ts and the batch
+# report were re-read in full. tests/fixtures/index.ts is unchanged (no teardown added, as the batch claims).
+# No knowledge file changed.
+#
+# Reviewer's own runs (2026-10-27): `npm run typecheck` clean; `npm run knowledge` clean (YAML tabs OK,
+# C-LOC-4 traceability OK); `npx playwright test --grep "@tc:TC-UPLOAD-001"` -> 1 passed (3.2s, chromium);
+# `--list --grep @tc:TC-UPLOAD-001` selects exactly 1 test (C-TC-2).
+#
+# r3 blocker 1 (C-POM-5, UploadPage.ts:71): RESOLVED. trackUploadPosts() (now :72-85) registers a named
+#   handler `onRequest` (:75) and returns { count, dispose }. dispose() calls this.page.off('request',
+#   onRequest) (:82) with the same function reference, so it really removes the listener. The helper
+#   still never asserts (C-POM-3). The spec calls dispose() in `finally` (spec:38-40) around steps 2-3, so
+#   the listener is removed after the step-3 total check and also when step 2 or 3 throws. There is exactly
+#   one removal mechanism: the returned disposer. The fixture has no teardown (C-POM-4 respected).
+# r3 blocker 2 (C-ASSERT-5, UploadPage.ts:72): RESOLVED. The filter is now
+#   `req.method() === 'POST' && req.url() === target` (:76), where
+#   target = new URL('/upload', this.page.url()).href (:73), computed when tracking starts (spec:18, after
+#   goto() in step 1). That is the exact method and URL. A POST to /upload on another host no longer matches.
+#   Knowledge confirms that the form has no action attribute and posts to the document URL
+#   (elements.upload_form, states.successful_submit: POST https://the-internet.herokuapp.com/upload), so the
+#   exact target is what the browser sends. The step-3 total of 1 (spec:36), which passes in the reviewer's
+#   run and the batch's Run 1, is positive evidence that the tightened filter still matches the real request.
+#   The rest of C-ASSERT-5 still holds: the counter starts before the action (spec:18, before chooseFile at
+#   :21), the count is 0 at that point (:26), the running total is 1 after submit (:36), and there is no
+#   negative waitForRequest.
+#
+# Regression check on the fix: nothing new was introduced. There are no new locators (C-LOC-4/5), no sleeps
+# (C-WAIT-1), and the steps are still wrapped (C-ASSERT-3). The try/finally wraps only steps 2-3. Steps 4-5
+# run after it, as before. A failure in step 1 throws before tracking starts, so there is nothing to leak.
+# The doc comment (:65-71) states the call-after-goto precondition and the caller's dispose obligation.
+#
+# Fix-round 3 self-verification (C-AGENT-4): the core sequence is present and convincing. Run 1 passed (and
+# shows that the exact-URL filter matches). Run 2 inverted the total to toBe(2) and failed in step 3 with the real message
+# (Expected: 2, Received: 1). Run 3 reverted and passed. However, one sentence overclaims; see the
+# suggestion below. It does not make the evidence unconvincing, because the checks rest on runs 1-3, not on
+# that sentence. So it is not grounds for rejection under the review agent's "missing or unconvincing" rule.
+#
+# r3 suggestions: deliberately left for the human (batch fix_rounds[2].not_applied). Nothing they cover
+# changed, so they are not re-raised or escalated. Current line numbers:
+#   - UploadPage.ts:58   C-POM-4     submit() keeps its own pathname-only POST /upload predicate. The drift it
+#                                    warned about now exists: the counter (exact URL, :76) and submit() (pathname, :58)
+#                                    identify "the upload request" differently. That is the situation the suggestion
+#                                    predicted, not a new change, so it stays a suggestion.
+#   - spec:12            C-ASSERT-1  Upload button checked only with toBeVisible (unchanged).
+#   - spec:25 (was :24)  C-ASSERT-1  step-2 heading presence via toBeVisible. The line moved by +1 because of the try block.
+#
+# Checklist B: no knowledge change this round. The round-1 result (no findings) stands. covered_by and
+# last_observed are current (C-KNOW-6/7). scenario-map status `in_review` is correct while review is open.
+
+findings:
+  - severity: suggestion
+    file: reports/codegen-batch-2026-10-27-TC-UPLOAD-001.yaml
+    line: 76
+    convention_ref: "C-AGENT-4 (partly a rubric gap; see conventions_silent_on)"
+    issue: >
+      The fix-round-3 self_verify says "The finally block ran dispose() on that failure path." Nothing in the
+      runs observed this. Run 2 recorded only the step-3 failure message. No run checked the listener count
+      or showed any effect of dispose(). The statement is an inference from try/finally semantics. It is very
+      likely true, because `finally` always runs when the try block throws, but it is worded as an
+      observation. Codegen has flagged this itself.
+    why_it_matters: >
+      C-AGENT-4 asks for each run to be recorded in words. The value of that record is that a reader can trust
+      every sentence in it as something that happened. One inferred statement worded as observed weakens trust in
+      the rest of the record and sets a bad precedent for later batches, where the inference might be wrong.
+      The core evidence (pass, invert, fail with the real message, revert, pass) is unaffected, so this is a
+      suggestion, not a blocker.
+    fix: >
+      Reword the sentence as an inference, e.g. "dispose() is in a finally block, so by try/finally semantics
+      it also runs on this failure path. This was not observed directly; no run inspected the listener." Do not
+      add a run just to prove it; the rubric does not require observing a disposer (see conventions_silent_on).
+
+conventions_silent_on:
+  - "Whether a self_verify record may contain inferences (e.g. language semantics) alongside observations, and how they must be marked. C-AGENT-4 requires runs to be 'recorded in words' but does not explicitly require each claim to be observed. The suggestion above relies on the spirit of C-AGENT-4. A human may want to add 'state only what a run showed; label inferences as such'."
+  - "Whether self-verification must exercise the NEGATIVE side of a tightened filter (that a POST /upload on another host is not counted). C-AGENT-4 requires one inverted core assertion, which was done. Proving the exclusion would need a stubbed foreign-origin request, and no rule asks for it."
+  - "Carried from r3, still open: whether a returned disposer must be called on the failure path (try/finally). It is satisfied here anyway. Also carried: how a page object obtains the app origin under a configurable BASE_URL (derived from page.url() here); the definition of 'core outcome' in C-ASSERT-1; the exact assertion for <input type=submit> elements; batch-report vs scenario-map `status` naming; `exact: true` on fixed-name locators; the purpose of first_load_ms."
+
+meta_signal: >
+  No rule is newly raised this round, so C-ASSERT-1 stays at 2 review logs (rounds 1 and 3), not more than
+  two (C-AGENT-9). The r3 advice still stands: add the toHaveText / toHaveAccessibleName line to the Codegen
+  prompt before a third occurrence. New watch item: Codegen's self_verify mixed an inference into its
+  observed-run record. If that recurs, the Codegen prompt (or C-AGENT-4) should say that self_verify states
+  only what a run showed.

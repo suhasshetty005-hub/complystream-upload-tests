@@ -1,0 +1,87 @@
+batch_date: 2026-10-27
+test_case: TC-UPLOAD-001
+status: done
+files: [pages/UploadPage.ts, tests/fixtures/index.ts, tests/upload/upload-form.spec.ts]
+knowledge_updated:
+  - "knowledge/pages/upload.yaml: covered_by now lists tests/upload/upload-form.spec.ts (C-KNOW-6)"
+  - "knowledge/scenario-map.yaml: TC-UPLOAD-001 status explored -> in_review, files added"
+reused: []   # first run: pages/ and tests/fixtures/index.ts did not exist, both created
+steps_mapped:
+  - step: 1
+    to: "uploadPage.goto(); expect(heading 'File Uploader' h3).toHaveText('File Uploader') (exact, C-ASSERT-1; changed from toBeVisible() in fix-round 2); expect(fileInput #file-upload).toBeVisible(); expect(uploadButton 'Upload').toBeVisible()"
+  - step: 2
+    to: "uploadPage.trackUploadPosts() started before the file is chosen (hoisted above the step-2 block in fix-round 2); uploadPage.chooseFile(sample.txt) via waitForEvent('filechooser') armed before clicking #file-upload; expect(fileInput).toHaveValue('C:\\fakepath\\sample.txt'); expect(heading).toBeVisible() (presence); expect(POST /upload count).toBe(0) (absence, C-ASSERT-2)"
+  - step: 3
+    to: "const response = await uploadPage.submit() (waitForResponse POST /upload armed before click, C-IO-2); expect(status).toBeGreaterThanOrEqual(200) and expect(status).toBeLessThan(300) (the test case's 2xx; 200 observed); expect(POST /upload count).toBe(1) (choose + submit; fix-round 2)"
+  - step: 4
+    to: "expect(uploadPage.resultHeading 'File Uploaded!' h3).toHaveText('File Uploaded!') (exact, C-ASSERT-1; changed from toBeVisible() in fix-round 1)"
+  - step: 5
+    to: "expect(uploadPage.uploadedFiles #uploaded-files).toHaveText('sample.txt') (exact, whitespace-normalised; excludes any other names)"
+self_verify: >
+  Run 1: passed (6.7s). Run 2: inverted the step-5 file-name assertion to toHaveText('wrong.txt');
+  it failed in step "5. Exactly sample.txt is shown as the uploaded file" with
+  'Error: expect(locator).toHaveText(expected) failed  Locator: locator('#uploaded-files')
+  Expected: "wrong.txt"  Received: "\n    sample.txt\n  "' after the 10s expect timeout.
+  Run 3: reverted to 'sample.txt' and it passed (3.4s). `npx playwright test --list --grep
+  @tc:TC-UPLOAD-001` selects exactly 1 test. Gates: `npm run typecheck` clean, `npm run knowledge`
+  clean (YAML tabs OK, locator traceability OK).
+fix_rounds:
+  - round: 1
+    source: reports/review-log/2026-10-27-TC-UPLOAD-001.yaml
+    applied:
+      - "BLOCKER 1 [C-ASSERT-1] tests/upload/upload-form.spec.ts:32: step 4 changed from expect(uploadPage.resultHeading).toBeVisible() to expect(uploadPage.resultHeading).toHaveText('File Uploaded!'). Without exact: true, the locator's name is a case-insensitive substring match, so visibility alone did not pin the recorded text."
+    not_applied: "Review suggestions were left untouched, as instructed; they go to the human in the final summary."
+    files_changed: [tests/upload/upload-form.spec.ts]
+    self_verify: >
+      Run 1: passed (3.2s). Run 2: inverted the step-4 assertion to toHaveText('File Uploaded') (no '!',
+      which the substring-matching locator still resolves, so only the exact assertion can catch it). It failed in step
+      "4. Result page shows the confirmation heading" with 'Error: expect(locator).toHaveText(expected) failed
+      Locator: getByRole('heading', { name: 'File Uploaded!', level: 3 })  Expected: "File Uploaded"
+      Received: "File Uploaded!"' after the 10s expect timeout (locator resolved to <h3>File Uploaded!</h3>).
+      Run 3: reverted to 'File Uploaded!' and it passed (3.2s). Gates: `npm run typecheck` clean,
+      `npm run knowledge` clean (YAML tabs OK, locator traceability OK).
+  - round: 2
+    source: reports/review-log/2026-10-27-TC-UPLOAD-001.yaml
+    applied:
+      - "SUGGESTION [C-ASSERT-1] tests/upload/upload-form.spec.ts:10: step 1 heading changed from expect(uploadPage.heading).toBeVisible() to expect(uploadPage.heading).toHaveText('File Uploader')."
+      - "SUGGESTION [C-TC-1] tests/upload/upload-form.spec.ts:30-33: step 3 now asserts the test case's 2xx range (status >= 200 and < 300, message 'POST /upload status <n> should be 2xx') instead of exactly 200. The comment keeps that 200 was observed. deviations_and_notes[0] corrected."
+      - "SUGGESTION [rubric gap; C-ASSERT-2, C-WAIT-2] tests/upload/upload-form.spec.ts:17,25,35: uploadPage.trackUploadPosts() hoisted above the step-2 block, so the counter still starts before the file is chosen; step-2 check of 0 kept; after submit() in step 3 added expect(uploadPosts(), 'POST /upload requests in total (choose + submit)').toBe(1), so a late POST from choosing the file shows up as 2."
+    not_applied: "Nothing else changed. The counter is still in the page object (convention question open with the human), and the fakepath value check is unchanged, as instructed."
+    files_changed: [tests/upload/upload-form.spec.ts, reports/codegen-batch-2026-10-27-TC-UPLOAD-001.yaml]
+    self_verify: >
+      Run 1: passed (7.0s). Run 2 (invert #1): step 1 set to toHaveText('File Uploader (disabled)'); it failed in
+      step "1. Open /upload: heading, file chooser and Upload button are shown" with 'Error: expect(locator).toHaveText(expected)
+      failed  Locator: getByRole('heading', { name: 'File Uploader', level: 3 })  Expected: "File Uploader (disabled)"
+      Received: "File Uploader"' after the 10s expect timeout (23 x locator resolved to <h3>File Uploader</h3>).
+      Run 3 (invert #2, reverted #1 first): lower bound set to toBeGreaterThanOrEqual(201), a range that excludes 200;
+      it failed in step "3. Click Upload: the upload request succeeds" with 'Error: POST /upload status 200 should be 2xx
+      expect(received).toBeGreaterThanOrEqual(expected)  Expected: >= 201  Received: 200'.
+      Run 4 (invert #3, reverted #2 first): total count set to toBe(2); it failed in step 3 with 'Error: POST /upload
+      requests in total (choose + submit)  expect(received).toBe(expected) // Object.is equality  Expected: 2  Received: 1'.
+      Run 5: reverted all three and it passed (4.4s). Gates: `npm run typecheck` clean, `npm run knowledge` clean
+      (YAML tabs OK, locator traceability OK).
+  - round: 3
+    source: reports/review-log/2026-10-27-TC-UPLOAD-001-r3.yaml
+    applied:
+      - "BLOCKER 1 [C-POM-5] pages/UploadPage.ts:71: trackUploadPosts() now returns { count, dispose }. The listener is a named onRequest handler, and dispose() calls this.page.off('request', onRequest). tests/upload/upload-form.spec.ts: steps 2-3 are wrapped in try { ... } finally { uploadPosts.dispose(); }, so the listener is removed right after the step-3 total check and also when a step fails. Reads changed from uploadPosts() to uploadPosts.count(). There is ONE removal mechanism (the returned disposer). No fixture teardown was added, and tests/fixtures/index.ts is unchanged."
+      - "BLOCKER 2 [C-ASSERT-5] pages/UploadPage.ts:72: the counter now matches the exact method and URL. When tracking starts (after goto(), with the page on /upload) it computes const target = new URL('/upload', this.page.url()).href, so the origin comes from the current page and BASE_URL can still override it. It then counts only req.method() === 'POST' && req.url() === target. A POST to /upload on any other host is no longer counted."
+    not_applied: "The three r3 suggestions (shared isUploadPost predicate for submit() [C-POM-4]; step-1 Upload button toHaveAccessibleName/toHaveValue [C-ASSERT-1]; step-2 heading toHaveText [C-ASSERT-1]) were left untouched, as instructed. They go to the human. Note that submit() therefore still uses the pathname-only predicate, which is the drift the first suggestion describes."
+    files_changed: [pages/UploadPage.ts, tests/upload/upload-form.spec.ts, reports/codegen-batch-2026-10-27-TC-UPLOAD-001.yaml]
+    self_verify: >
+      Run 1: passed (3.2s). The step-3 check expect(uploadPosts.count()).toBe(1) passed after submit(). This is the
+      evidence that the tightened exact-URL filter still counts the app's real POST /upload: if the target URL did
+      not match the real request, the count would be 0 and step 3 would fail. Run 2 (inversion): set the step-3
+      total to toBe(2). It failed in step "3. Click Upload: the upload request succeeds" with 'Error: POST /upload
+      requests in total (choose + submit)  expect(received).toBe(expected) // Object.is equality  Expected: 2
+      Received: 1'. The finally block ran dispose() on that failure path. Run 3: reverted to toBe(1) and it passed
+      (3.2s). Gates: `npm run typecheck` (tsc --noEmit) clean; `npm run knowledge` clean (YAML tabs OK, locator
+      traceability C-LOC-4 OK).
+not_generated: []   # every step with an expected result maps to an assertion
+deviations_and_notes:
+  - "Step 3: the test case says '2xx' and the knowledge file records 200 (states.successful_submit). 200 is a 2xx, so they do not conflict and nothing goes to Doc-Gap. The test asserts the 2xx range the test case specifies; the observed 200 is kept as a comment. (Corrected in fix-round 2: the earlier 'knowledge wins, assert exactly 200' wording misread C-TC-1, under which the test case alone defines what is tested.)"
+  - "Step 1: the test case names the file chooser 'Choose File'. Knowledge records that as the browser's native label (doc_discrepancies, gotchas), so the test locates it by '#file-upload' (C-LOC-2) and does not assert the 'Choose File' text. For Doc-Gap: the test case wording is browser-dependent."
+  - "Step 2: 'the file is selected' is asserted through the input value 'C:\\fakepath\\sample.txt' recorded by the Explorer. The visible chosen-file-name text is native browser chrome and not in the accessibility tree, so it is not asserted."
+  - "Step 2: 'nothing is sent to the server' is asserted as zero POST /upload requests, counted with a page.on('request') listener in UploadPage.trackUploadPosts(). The step-2 read is a snapshot taken after the input value assertion has settled. Since fix-round 2 the counter starts before the file is chosen and is read again after submit() in step 3 (expected exactly 1), so a POST fired late by choosing the file shows up as 2. Knowledge records no request at all on choose."
+conventions_silent_on:
+  - "How to assert that an action sent no request (a request counter vs. a negative waitForRequest). The rubric has no rule; I used a page-object request counter filtered to POST /upload."
+  - "Whether a page object may hold a non-locator helper such as a request counter (C-POM-3 covers locators and expect only)."
