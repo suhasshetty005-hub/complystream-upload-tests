@@ -4,7 +4,7 @@ Playwright + TypeScript tests for <https://the-internet.herokuapp.com/upload>.
 
 ## Run it
 
-Requires Node 18+.
+Requires Node 20+ (Playwright 1.64 needs it).
 
 ```bash
 npm install && npm test

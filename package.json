@@ -4,6 +4,9 @@
   "private": true,
   "description": "Playwright + TypeScript tests for the-internet.herokuapp.com/upload, written by a four-agent Claude Code pipeline",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "pretest": "playwright install chromium",
     "test": "playwright test",
