@@ -1,0 +1,1 @@
+ComplyStream upload test fixture (non-ASCII name). Harmless plain text, safe to publish.
