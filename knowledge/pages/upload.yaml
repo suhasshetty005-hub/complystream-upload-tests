@@ -3,6 +3,9 @@
 # project). Second session, the same day and run from this repo: browser_file_upload accepted
 # C:\Users\suhas\complystream-upload-tests\tests\fixtures\files\sample.txt, and the file-chosen
 # and successful-submit states were observed. Drag-and-drop is still unobserved (out of scope).
+# Third session, 2026-10-27 (scope: TC-UPLOAD-002, empty-submit page only, no file uploaded):
+# re-observed the empty submit (POST /upload -> 500 again) and recorded the error heading and the
+# validation message as elements, plus which form elements are absent from the error page.
 
 page: upload
 title: File Uploader
@@ -16,7 +19,7 @@ elements:
     locator: "page.getByRole('heading', { name: 'File Uploader', level: 3 })"
     why: "Snapshot shows heading \"File Uploader\" [level=3]; role + name is the first choice (C-LOC-1)."
     attributes: "<h3> with no attributes"
-    notes: "The empty-submit error page and the success page reuse the same h3 position with different text ('Internal Server Error' / 'File Uploaded!'), so assert the name, not just the role."
+    notes: "Only on the form page. The empty-submit error page and the success page reuse the same h3 position with different text (see elements.empty_submit_error_heading and elements.result_heading), so assert the name, not just the role."
 
   - name: file_input
     locator: "page.locator('#file-upload')"
@@ -60,6 +63,18 @@ elements:
     attributes: 'id="uploaded-files" class="panel text-center"; 0 child elements; text node only'
     notes: "textContent is JSON \"\\n    sample.txt\\n  \" (newline + 4 spaces before, newline + 2 spaces after); innerText is exactly 'sample.txt'. No other file names are present. Raw textContent equality fails; use toHaveText('sample.txt'), which normalises whitespace, or trim first. Only present after a successful submit."
 
+  - name: empty_submit_error_heading
+    locator: "page.getByRole('heading', { name: 'Internal Server Error', level: 3 })"
+    why: "Snapshot of the empty-submit page shows heading \"Internal Server Error\" [level=3]; role + name is the first choice (C-LOC-1)."
+    attributes: "<h3>Internal Server Error</h3> with no attributes (no id, no class); it is the only h1-h6 on the error page"
+    notes: "Only present after an empty submit (POST /upload -> 500). textContent and innerText are both exactly \"Internal Server Error\" (no surrounding whitespace). It sits where 'File Uploader' sits on the form page; see elements.heading. For TC-UPLOAD-002 step 3 a test asserting 'no server error' would expect this heading NOT to be visible."
+
+  - name: empty_submit_message
+    locator: "page.locator('#upload-error')"
+    why: "Snapshot shows it only as an unnamed 'paragraph' (paragraph is not named from content, so getByRole('paragraph', { name }) cannot target it; C-LOC-1 not possible). It has a stable id, so fall back to the DOM id (C-LOC-2)."
+    attributes: '<p id="upload-error"> with no class and no other attributes; 0 child elements (text node only); parent is <div class="example">'
+    notes: "It is the only element whose text is 'No file was chosen. Please choose a file to upload.' and the only <p> on the error page. textContent and innerText are identical and verbatim \"No file was chosen. Please choose a file to upload.\" (no leading or trailing whitespace, no newlines), so an exact toHaveText with this string matches. Only present after an empty submit."
+
   - name: empty_submit_back_link
     locator: "page.getByRole('link', { name: 'Back to the File Uploader' })"
     why: "Snapshot shows link \"Back to the File Uploader\" (/url: /upload) on the empty-submit error page (C-LOC-1)."
@@ -89,8 +104,8 @@ states:
 
   - name: empty_submit
     trigger: "Click 'Upload' with no file chosen"
-    request: "POST https://the-internet.herokuapp.com/upload -> 500"
-    observed: "URL stays https://the-internet.herokuapp.com/upload. Page title 'The Internet'. h3 heading 'Internal Server Error'. Paragraph 'No file was chosen. Please choose a file to upload.' Link 'Back to the File Uploader' (href /upload), which returns to the initial state."
+    request: "POST https://the-internet.herokuapp.com/upload -> 500 (observed twice: first in the TC-UPLOAD-001 session, again on 2026-10-27 in the TC-UPLOAD-002 session, where the new document's Navigation Timing entry had type 'navigate', responseStatus 500, duration 480 ms). The second observation matches the first."
+    observed: "URL stays https://the-internet.herokuapp.com/upload. Page title 'The Internet'. #content holds only <div class=\"example\"> containing <h3>Internal Server Error</h3>, <p id=\"upload-error\">No file was chosen. Please choose a file to upload.</p> and <a href=\"/upload\">Back to the File Uploader</a>. Link 'Back to the File Uploader' returns to the initial state (first session). ABSENT on this page: the 'File Uploader' heading (the only text containing 'File Uploader' is the back link), #file-upload (0 input[type=file]), the Upload button (no #file-submit, no button or submit input), any <form>, and #drag-drop-upload."
 
   - name: drag_drop
     trigger: "Drop a file onto #drag-drop-upload"
@@ -102,6 +117,7 @@ gotchas:
   - "The file input's snapshot name 'Choose File' is the browser's native button label, not author markup (0 <label> elements). It may differ across browsers or locales, so locate by '#file-upload', not by getByRole('button', { name: 'Choose File' })."
   - "An empty submit returns HTTP 500, not a 4xx or an inline validation message. A test asserting only the page text would miss the 500, and a test asserting only status would miss the message. Assert both."
   - "Success and failure both end on URL /upload (POST /upload -> 200 vs -> 500). A URL assertion proves nothing. Assert the POST /upload response status plus the 'File Uploaded!' heading."
+  - "On the empty-submit page the only text containing 'File Uploader' is the link 'Back to the File Uploader'. A loose getByText('File Uploader') matches that link, so it would wrongly 'prove' the user is still on the form. Use getByRole('heading', { name: 'File Uploader' }) (absent on the error page) or #file-upload (absent too)."
   - "#uploaded-files textContent includes template whitespace around 'sample.txt'. Use toHaveText('sample.txt'), which normalises whitespace, or trim before an exact comparison. Do not compare raw textContent."
   - "The success page has no link back to the form and no file input. A test that uploads twice must navigate to /upload again."
   - "The drop zone and the 'No file chosen' / chosen-file-name text do not appear in the accessibility snapshot. Use the DOM (#file-upload files) or screenshots for them."
@@ -119,3 +135,4 @@ not_yet_observed:
 
 covered_by:
   - "tests/upload/upload-form.spec.ts (TC-UPLOAD-001)"
+  - "tests/upload/empty-submit.spec.ts (TC-UPLOAD-002, @known-defect DEFECT-001)"

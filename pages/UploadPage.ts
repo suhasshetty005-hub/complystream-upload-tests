@@ -22,6 +22,17 @@ export class UploadPage {
    * generic with no role or accessible name; it has a stable id. knowledge: elements.uploaded_files
    */
   readonly uploadedFiles: Locator;
+  /**
+   * h3 "Internal Server Error" on the page returned by an empty submit (POST /upload -> 500).
+   * knowledge: elements.empty_submit_error_heading
+   */
+  readonly emptySubmitErrorHeading: Locator;
+  /**
+   * The "No file was chosen..." message on the empty-submit page. C-LOC-2 fallback: it is an
+   * unnamed paragraph (paragraphs are not named from content, so getByRole cannot target it);
+   * it has a stable id. knowledge: elements.empty_submit_message
+   */
+  readonly emptySubmitMessage: Locator;
 
   constructor(private readonly page: Page) {
     this.heading = page.getByRole('heading', { name: 'File Uploader', level: 3 });
@@ -29,6 +40,8 @@ export class UploadPage {
     this.uploadButton = page.getByRole('button', { name: 'Upload' });
     this.resultHeading = page.getByRole('heading', { name: 'File Uploaded!', level: 3 });
     this.uploadedFiles = page.locator('#uploaded-files');
+    this.emptySubmitErrorHeading = page.getByRole('heading', { name: 'Internal Server Error', level: 3 });
+    this.emptySubmitMessage = page.locator('#upload-error');
   }
 
   async goto(): Promise<void> {
@@ -48,7 +61,9 @@ export class UploadPage {
   }
 
   /**
-   * Click Upload and return the POST /upload response (knowledge: states successful_submit).
+   * Click Upload and return the POST /upload response. Used with a file chosen (knowledge:
+   * states successful_submit) and with none (knowledge: states empty_submit); the action is the
+   * same click, so there is one method for both (C-POM-4).
    * The response wait is armed before the click (C-IO-2) and filtered to the app's own
    * /upload POST, ignoring third-party beacons (knowledge: gotchas).
    */

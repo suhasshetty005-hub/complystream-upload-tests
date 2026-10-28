@@ -116,3 +116,182 @@ Test status: passes, review approved. The findings below are about the documents
   recorded correctly as a test-design gotcha (gotchas[3]). It does not contradict any test case.
 - **Empty submit returns 500: confirmed**, but as DEFECT-001 above against TC-UPLOAD-002. It does not
   affect TC-UPLOAD-001.
+
+## 2026-10-27 — TC-UPLOAD-002 · pages/upload
+
+Sources: test-cases/TC-UPLOAD-002.md; knowledge/pages/upload.yaml (last_observed 2026-10-27, third
+Explorer session, scope TC-UPLOAD-002); reports/codegen-batch-2026-10-27-TC-UPLOAD-002.yaml (status done,
+not_generated[0..1], test_case_disagreements[0..2], conventions_silent_on[0..3]);
+reports/review-log/2026-10-27-TC-UPLOAD-002.yaml (approved, 4 suggestions).
+Test status: `@known-defect`. It fails red live at tests/upload/upload-form.spec.ts:80 with "POST /upload
+status 500 must not be 5xx (DEFECT-001) / Expected: < 500 / Received: 500" (batch self_verify run_A_live
+and run_C_stub_removed, reproduced by the reviewer). It passed against a POST-only stub returning 400
+(run_B_stub).
+
+### DEFECT-001 · Update (supersedes the Certainty, Covered by and Scope note lines of the 2026-10-27 TC-UPLOAD-001 entry above)
+The original entry above stays as written. These lines replace three of its fields:
+- **Certainty (replaces "the knowledge file records one observed state"):** reproduced 2 of 2. The 500
+  was observed in the TC-UPLOAD-001 session and again in the TC-UPLOAD-002 session, where the new document's
+  Navigation Timing entry had type 'navigate', responseStatus 500, duration 480 ms. "The second observation
+  matches the first" (states.empty_submit request). The Codegen live runs A and C and the reviewer's run
+  each got `Received: 500` as well, although those are test runs, not Explorer observations. Caveat: every
+  observation was on 2026-10-27 against https://the-internet.herokuapp.com (observed_on). It is
+  reproducible enough to file upstream. Whether it is long-standing is unknown.
+- **Severity:** unchanged, High (TC-UPLOAD-002 Priority: High; the Notes call it "the mistake users make
+  most often").
+- **What exactly is wrong, now fully recorded:** two things only. (1) Status 500
+  (states.empty_submit request). (2) h3 "Internal Server Error" (elements.empty_submit_error_heading,
+  "the only h1-h6 on the error page"). The user-facing message is already right:
+  `<p id="upload-error">No file was chosen. Please choose a file to upload.</p>`
+  (elements.empty_submit_message). A side effect that matters for the fix: the error page has no form,
+  no #file-upload and no Upload button (states.empty_submit "ABSENT on this page"). The user can only
+  recover through the link "Back to the File Uploader" (elements.empty_submit_back_link).
+- **Covered by (replaces "nothing yet"):** tests/upload/upload-form.spec.ts:53-93, test
+  "TC-UPLOAD-002: Submitting with no file selected shows a validation message", tags
+  `@tc:TC-UPLOAD-002 @upload @known-defect`. Its annotation points here. Today it fails at step 3 (:80)
+  on the 500 itself, not on a timeout (C-DEFECT-4). knowledge/pages/upload.yaml covered_by and
+  knowledge/scenario-map.yaml (status in_review) both list it.
+- **Limits of that coverage. Read these before treating a future red or green as proof:**
+  - The test can only turn green if the fix still sends POST /upload. See the step-2 finding below.
+  - A half fix (status changed to non-5xx, heading kept) should fail at :83
+    (`emptySubmitErrorHeading` toBeHidden). No run has shown :83 failing, though (review-log suggestion 2,
+    batch run_B_stub). This is reasoning, not evidence.
+  - A fix that rewords the message fails at :88. See the step-4 finding below.
+- **Scope note (replaces "TC-UPLOAD-002 ... is not in knowledge/scenario-map.yaml yet"):** it is now
+  there (scenario-map.yaml id TC-UPLOAD-002, status in_review, comment naming DEFECT-001).
+
+### Stale: TC-UPLOAD-002 Notes say the server error "is still not confirmed"
+- **Confirmed.** This was already flagged as a "Stale side-effect" in the DEFECT-001 entry above. It is
+  repeated here because the evidence is now stronger and the test exists.
+- **Test case says (Notes, bullet 2):** "I recall that the current page returns a raw server error here.
+  **This is still not confirmed** … The Explorer must observe it. If it does, this test is the suite's
+  deliberately failing `@known-defect` test".
+- **Now recorded:** observed twice (states.empty_submit request). The condition ("If it does") is met,
+  and the test exists (covered_by[1]).
+- **Proposed wording:** "Confirmed 2026-10-27 (observed twice): POST /upload -> 500, heading 'Internal
+  Server Error', message 'No file was chosen. Please choose a file to upload.' (knowledge/pages/upload.yaml
+  :: states.empty_submit). This test is the `@known-defect` test for DEFECT-001 (reports/doc-gaps.md) and
+  fails red until it is fixed." The header line "Automate: Yes (expected to fail against the current page;
+  see Notes)" is still accurate.
+
+### Unverifiable scenario: step 2 allows two outcomes, and the page today can show only one of them
+- **Confirmed.** This raises the same point as batch not_generated[1], test_case_disagreements[1] and
+  review-log suggestion 1.
+- **Test case says (step 2):** "The user stays on the upload form, **or** gets a page that tells them to
+  choose a file". The case does not say "no request is sent". That phrase appears only in this agent's
+  output template, not in TC-UPLOAD-002, so it is not used as evidence here.
+- **The page does:** the second branch only. POST /upload goes out and a new document loads. That
+  document carries the message, so branch 2 is met in substance, apart from the 500 (states.empty_submit).
+  Branch 1 is literally false today: the URL stays /upload but the form is gone (no heading 'File
+  Uploader', no #file-upload, no Upload button). gotchas[4] warns that a loose
+  getByText('File Uploader') would wrongly "prove" branch 1 through the back link.
+- **Why it is unverifiable, not a contradiction:** branch 1 (stay on the form, which could mean
+  client-side validation with no request) has never been observable. The app does not implement it, so
+  there is no state, no element and no message location for it in the knowledge file. The test cannot
+  be written for it without invented content (batch not_generated[1]). The test assumes branch 2:
+  `uploadPage.submit()` waits for a POST /upload response (:74). The recorded #file-upload attributes
+  (`id="file-upload" type="file" name="file"`, elements.file_input) do not include `required`. If a fix
+  adds it, or any other client-side check, no POST is sent, step 2 times out, and the test stays red
+  after DEFECT-001 is fixed (review-log :54-57).
+- **Answer to "pick one or name both":** the test case must either **pick one, or name both with an
+  observable pass condition for each**. As written, "stays on the upload form" has no observable
+  criterion. It does not say whether a request may be sent, or where the message appears. Picking the
+  outcome is a product decision. This report does not choose one.
+  - Option A, server response (matches today's architecture, and the test passes unchanged once the
+    status is fixed): "Clicking Upload sends POST /upload. The response is a non-5xx page showing a
+    message that a file is required, and the upload form (file input and Upload button) is shown again
+    or reachable."
+  - Option B, client-side (likely the most common fix, per the review log): "No request is sent. The
+    page stays on the upload form (heading 'File Uploader', #file-upload, Upload button visible) and a
+    message that a file is required is shown." This needs a re-explore after the fix: where the message
+    lives, and whether it is DOM text or the browser's native validation bubble. That last part is an
+    inference, not recorded. A native bubble has no DOM text to assert with toHaveText.
+  - Option C, both allowed: keep both branches, each worded as in A and B. The test would then have to
+    branch on a request counter (review-log suggestion 1, C-ASSERT-5). The rubric is silent on that
+    (review-log conventions_silent_on[0]), so a human must also rule there.
+- **Needs:** a product-owner decision (A, B or C), and for B or C an Explorer observation of the fixed
+  behaviour.
+- **Interim (from review-log suggestion 1, not applied here):** extend the test annotation to say "a
+  response timeout in step 2 may mean the app switched to client-side validation; re-explore before
+  reading this as DEFECT-001".
+
+### Unverifiable scenario: step 3 says "not a 5xx" but specifies no status
+- **Confirmed as a spec gap.** The test case states only an exclusion: "the response is not a 5xx".
+- **What follows:** any of 200 (re-rendered form), a 3xx (redirect back to GET /upload), 400 or 422 meets
+  step 3 as written. The test mirrors this exactly: `toBeLessThan(500)` (:80), so it neither over- nor
+  under-asserts the case. The stub's 400 (run_B_stub) was Codegen's choice, not a spec value (batch
+  conventions_silent_on[2]). Only 400 has been shown to pass. Note: the "4xx or inline message" in the
+  DEFECT-001 entry above and in doc_discrepancies[0] is the Explorer's and this report's view of what a
+  user would expect. It is not a recorded spec value.
+- **Inference, not run:** with a 3xx, `submit()` resolves on the redirect response itself, so :80 passes,
+  and steps 3-4 then read the redirected page. That only works if the message survives the redirect.
+- **Needs:** a spec value. Either one status, or the accepted set together with the page shape for each.
+  If the product owner wants strict client-error semantics, step 3 should read "4xx (400 or 422)" rather
+  than "not a 5xx". If it does not care, the current wording is fine, and the gap is documentation only.
+  Lower priority than the step-2 decision, which determines whether any status exists at all.
+
+### Unverifiable scenario: step 4 does not specify the message wording, and the test pins it
+- **Confirmed, with lower severity than the step-2 finding.**
+- **Test case says (step 4):** "A validation message tells the user a file is required". Whether a
+  message "tells the user a file is required" is a judgement about meaning. A test cannot check it
+  without a spec string or a fixed location.
+- **The page does:** step 4 is already met by the live page. `#upload-error` reads exactly "No file was
+  chosen. Please choose a file to upload." (elements.empty_submit_message). The defect is the 500 and the
+  heading, not the message. Live runs never reach step 4 because :80 fails first (batch
+  test_case_disagreements[2], an inference).
+- **The test pins two things the test case does not:** the exact wording (:88, C-ASSERT-1) and the
+  location `#upload-error` (:82, :88). A fix that keeps the behaviour but rewords the message, or moves
+  it to another element, fails the test at step 3 or 4 even though the case is met. The review log names
+  this as an open rubric question (conventions_silent_on[3]).
+- **Is it a spec gap?** Yes. The case should either (a) adopt the observed string as the specified text,
+  if the product owner confirms it is intended. That is the cheapest option: the app already shows it,
+  and the test stays as is. Or (b) state that the wording is free, and say what the test may check
+  instead. This report recommends (a), because the observed message is already correct and clear. The
+  decision belongs to the product owner.
+- **Needs:** the specified message text, or an explicit "any wording", plus where it appears. The
+  location depends on the step-2 decision: under option B the location is not observed yet.
+
+### Missing coverage: recovery from the empty-submit page ("Back to the File Uploader")
+- **The page does:** the error page has no form, and its only way forward is the link "Back to the File
+  Uploader" (href /upload), which returns to the initial state (elements.empty_submit_back_link,
+  states.empty_submit, from the first session only).
+- **No test case covers it.** A search of test-cases/ for "back" and "back link" found no step about it.
+- **Priority:** low, and it depends on DEFECT-001. If the fix re-renders the form (step-2 option A with
+  the form shown, or option B), the link may disappear by design. Propose it only as a step in whichever
+  outcome the product owner picks: "the user can try again without reloading". Do not write it as a
+  separate case against the defective page.
+
+### Candidates reviewed and rejected (not doc gaps)
+- **Step 3 "the page does not show 'Internal Server Error'" is only partly asserted: rejected as a
+  doc gap.** batch not_generated[0] notes that only headings are checked (:83). On the observed page,
+  though, #content holds only the h3, the p and the a (states.empty_submit), and the title is 'The
+  Internet'. So the h3 is the only recorded place the phrase appears. The heading check covers every
+  observed occurrence. Whether :83 can actually fail is a test-verification issue (review-log suggestion
+  2), not a test-case issue.
+- **Step 1 "the upload form is shown": rejected.** It matches states.initial and elements.heading /
+  upload_button. The loose toBeVisible on the button (:68) is review-log suggestion 3, a test-strength
+  point, not a doc gap.
+- **A new DEFECT id for the missing form on the error page: rejected.** It follows from the same 500
+  page and is recorded under DEFECT-001 above. A separate id would duplicate it.
+
+## 2026-10-27 — Location update · TC-UPLOAD-002 test moved
+
+The earlier sections stay as written. At the human's request, the TC-UPLOAD-002 test moved from
+tests/upload/upload-form.spec.ts to its own file, **tests/upload/empty-submit.spec.ts**. The test body is
+unchanged, so every finding above still holds. Only the cited locations change. Each old line reference
+below is 49 lower in the new file. Each was checked against the new file. tests/upload/upload-form.spec.ts
+no longer contains TC-UPLOAD-002. knowledge/pages/upload.yaml covered_by and knowledge/scenario-map.yaml
+already name the new file.
+
+| Old location (upload-form.spec.ts) | New location (empty-submit.spec.ts) | What is there | Cited in |
+|---|---|---|---|
+| :53-93 | :4-44 | the whole test | DEFECT-001 Update, Covered by |
+| :68 | :19 | `uploadButton` toBeVisible (step 1) | TC-002 rejected candidates, step 1 |
+| :74 | :25 | `uploadPage.submit()` (step 2) | step-2 unverifiable finding |
+| :80 | :31 | status `toBeLessThan(500)`, the live failure point | TC-002 Test status line; DEFECT-001 Update, Covered by ("fails at step 3"); step-3 finding (twice); step-4 finding |
+| :82 | :33 | `emptySubmitMessage` toBeVisible | step-4 finding |
+| :83 | :34 | `emptySubmitErrorHeading` toBeHidden | DEFECT-001 Update, Limits (twice); TC-002 rejected candidates, step 3 (twice) |
+| :88 | :39 | `emptySubmitMessage` toHaveText (exact string on :40) | DEFECT-001 Update, Limits; step-4 finding (twice) |
+
+Not changed: "review-log :54-57" in the step-2 finding cites the review log, not the spec file.
+"review-log round 1, line 22/28" in the TC-UPLOAD-001 section cites the TC-UPLOAD-001 review log.

@@ -1,0 +1,155 @@
+batch_date: 2026-10-27
+test_case: TC-UPLOAD-002
+status: done   # generated and self-verified; the test fails red against the live app by design (@known-defect)
+history:
+  - "Run 1 (2026-10-27): blocked: needs_exploration. Missing facts 1 and 2 (locators for the validation message and the error heading), plus optional fact 3 (absences on the error page)."
+  - "Run 2 (2026-10-27): unblocked. The Explorer recorded elements.empty_submit_message, elements.empty_submit_error_heading, the absences in states.empty_submit, a second 500 observation and the back-link gotcha. All three missing facts are now covered."
+files:
+  - pages/UploadPage.ts               # 2 readonly locators added; submit() doc comment widened
+  - tests/upload/empty-submit.spec.ts  # TC-UPLOAD-002 test; moved here from upload-form.spec.ts in fix round 1 (human decision)
+knowledge_updated:
+  - "knowledge/scenario-map.yaml: TC-UPLOAD-002 status explored -> in_review, files added, comment naming DEFECT-001"
+  - "knowledge/pages/upload.yaml: covered_by += 'tests/upload/upload-form.spec.ts (TC-UPLOAD-002, @known-defect DEFECT-001)'"
+reused:
+  - "pages/UploadPage.ts: goto(), heading, uploadButton, submit() (the empty submit is the same click as the normal submit, so no submitEmpty() was added; C-POM-4)"
+  - "tests/fixtures/index.ts: uploadPage fixture, unchanged"
+known_defect: DEFECT-001   # reports/doc-gaps.md, "DEFECT-001 · Contradiction: empty submit returns HTTP 500 for a validation message"
+
+coverage_check:
+  - step: 1
+    covered: true
+    facts: "elements.heading, elements.upload_button, states.initial"
+  - step: 2
+    covered: true
+    facts: "states.empty_submit trigger + request (POST /upload -> 500, observed twice)"
+  - step: 3
+    covered: true
+    facts: "states.empty_submit status 500; elements.empty_submit_error_heading"
+  - step: 4
+    covered: true
+    facts: "elements.empty_submit_message (#upload-error, exact text, no surrounding whitespace)"
+
+page_object_changes:
+  - "emptySubmitErrorHeading = page.getByRole('heading', { name: 'Internal Server Error', level: 3 }) (knowledge: elements.empty_submit_error_heading, C-LOC-1)"
+  - "emptySubmitMessage = page.locator('#upload-error') (knowledge: elements.empty_submit_message; C-LOC-2 fallback, reason in the doc comment)"
+
+spec:
+  title: "TC-UPLOAD-002: Submitting with no file selected shows a validation message"
+  tags: ['@tc:TC-UPLOAD-002', '@upload', '@known-defect']
+  annotation: "{ type: 'known-defect', description: 'DEFECT-001: an empty submit returns HTTP 500 \"Internal Server Error\" instead of a validation response. Expected to fail red until fixed. See reports/doc-gaps.md, DEFECT-001.' } (C-DEFECT-2)"
+  test_fail_or_fixme: none (C-DEFECT-1)
+  grep_selection: "npx playwright test --list --grep @tc:TC-UPLOAD-002 lists exactly 1 test (C-TC-2)"
+
+steps_mapped:
+  - step: 1
+    to: "uploadPage.goto(); expect(uploadPage.heading).toHaveText('File Uploader'); expect(uploadPage.uploadButton).toBeVisible()"
+  - step: 2
+    to: "const response = uploadPage.submit()  (POST /upload response wait armed before the click, C-IO-2)"
+    expected_result_asserted_in: >
+      Step 4. The step-2 alternative "a page that tells them to choose a file" is asserted by the
+      exact message check in step 4. It is not asserted inside step 2, so the first assertion
+      after submit is the status check that fails on the defect (C-DEFECT-4).
+  - step: 3
+    to: >
+      expect(status, 'POST /upload status ${status} must not be 5xx (DEFECT-001)').toBeLessThan(500)
+      as the first assertion after submit; then expect(uploadPage.emptySubmitMessage).toBeVisible()
+      (presence) paired with expect(uploadPage.emptySubmitErrorHeading).toBeHidden() (absence) (C-ASSERT-2, C-ASSERT-4)
+  - step: 4
+    to: "expect(uploadPage.emptySubmitMessage).toHaveText('No file was chosen. Please choose a file to upload.') (exact, C-ASSERT-1)"
+
+self_verify:   # C-DEFECT-3. Only what the runs showed; inferences are marked.
+  command: 'npx playwright test --grep "@tc:TC-UPLOAD-002" --retries=0'
+  run_A_live: >
+    FAILED (1 failed, 5.5s) in step "3. The response is not a server error" at
+    upload-form.spec.ts:80, with: 'Error: POST /upload status 500 must not be 5xx (DEFECT-001)
+    / expect(received).toBeLessThan(expected) / Expected: < 500 / Received: 500'.
+    The failure is on the 500 itself, not on a locator timeout (C-DEFECT-4).
+  run_B_stub: >
+    PASSED (1 passed, 7.5s; 8.6s wall). Temporary change: the test signature took { uploadPage, page }
+    and, before step 1, page.route('**/upload', ...) called route.fallback() for non-POST requests
+    and fulfilled POST with status 400, contentType text/html and a body holding
+    <h3>File Uploader</h3> and <p id="upload-error">No file was chosen. Please choose a file to upload.</p>,
+    and no 'Internal Server Error' heading. Inference (not separately observed): step 1 ran against
+    the real GET /upload, because the stub fell back for GET.
+  run_C_stub_removed: >
+    The spec was restored from a copy taken before the stub was added; cmp reported the two files
+    IDENTICAL, and grep found 0 matches for page.route / STUB / fulfill / '{ uploadPage, page }'.
+    FAILED again (1 failed) in step 3 with the same message: 'POST /upload status 500 must not be
+    5xx (DEFECT-001)', 'Expected: < 500', 'Received: 500'.
+  regression_TC_UPLOAD_001: 'npx playwright test --grep "@tc:TC-UPLOAD-001" --retries=0: PASSED (1 passed, 8.1s)'
+  gates:
+    typecheck: "npm run typecheck (tsc --noEmit): clean, no output (run after the final spec state)"
+    knowledge: "npm run knowledge: YAML tabs OK; locator traceability (C-LOC-4) OK"
+
+not_generated:
+  - >
+    Step 3, "the page does not show 'Internal Server Error'": asserted only for headings, through the
+    recorded elements.empty_submit_error_heading locator (a loose name match, so it also catches a
+    heading that merely contains the phrase). Body text outside a heading is not checked, because
+    no page-wide text locator is recorded in the knowledge file and adding one would be invented.
+  - >
+    Step 2, alternative "the user stays on the upload form" with no request: not covered. submit()
+    waits for a POST /upload response, so a fix that validates client-side and sends nothing would
+    make the test time out rather than pass. See conventions_silent_on.
+
+test_case_disagreements:   # for Doc-Gap; the test case was not edited (C-TC-1)
+  - "Notes say the raw server error 'is still not confirmed'. It is now observed twice (states.empty_submit), so that note is stale. Already raised in reports/doc-gaps.md DEFECT-001."
+  - >
+    Step 2 accepts two outcomes (stay on the form, or a page that says to choose a file) and does
+    not say which one the fix must deliver. The test assumes a server response, which is what the
+    live app sends today.
+  - >
+    Step 4 is already satisfied by the live app: the 500 page carries the exact message in
+    #upload-error. Inference (step 4 was not reached in runs A or C, because step 3 fails first): the
+    only failing parts against the live app are the 500 status and the 'Internal Server Error' heading.
+
+conventions_silent_on:
+  - >
+    How a known-defect test should assert a specified outcome that allows alternatives (step 2: no
+    request + inline message, OR a response page). C-ASSERT-5 bans a negative waitForRequest with a
+    timeout, and C-ASSERT-4 wants the server response "where both exist". No rule says how to
+    branch when the specified behaviour may send no request.
+  - "Whether a C-DEFECT-3 stub may also serve the GET, or must intercept only the defective POST. Done: POST only, GET via route.fallback()."
+  - "What status and body a C-DEFECT-3 stub should return when the test case does not pin one. Used 400 with the observed message markup and the 'File Uploader' heading; any non-5xx response with #upload-error carrying the exact text would pass."
+  - "Which scenario-map status Codegen sets after self-verify when review is still to come. Set 'in_review'; TC-UPLOAD-001 shows 'done'."
+
+fix_rounds:
+  - round: 1
+    date: 2026-10-27
+    kind: structural_move   # no review findings applied; open review suggestions deliberately NOT applied
+    requested_by: human
+    change: >
+      Moved the TC-UPLOAD-002 test from tests/upload/upload-form.spec.ts (lines 53-93, inside
+      describe 'Upload form (file picker)') into a new file, tests/upload/empty-submit.spec.ts, inside
+      describe 'Upload form (empty submit)'. The new file imports `{ test, expect }` from '../fixtures',
+      the same fixture module upload-form.spec.ts uses; `files` is not imported because TC-002 does
+      not use it. The test body (title, tags, DEFECT-001 annotation, steps, assertions, comments) is
+      byte-identical: the original lines 53-93 and the new file's lines 4-44 compared equal with cmp.
+      upload-form.spec.ts lost only lines 52-93 (the blank separator line and the TC-002 test);
+      diff against a pre-edit copy showed only that deletion. Its import line is unchanged, because
+      `test`, `expect` and `files` are all still used by TC-UPLOAD-001.
+    overrides_default: >
+      Explicit human decision overriding the "one file per area" default in agents/codegen-agent.md
+      (Process step 3). Empty submit is the same area (upload form) as TC-UPLOAD-001 and would
+      otherwise have stayed in upload-form.spec.ts.
+    references_updated:
+      - "knowledge/scenario-map.yaml: TC-UPLOAD-002 files: tests/upload/upload-form.spec.ts -> tests/upload/empty-submit.spec.ts (pages/UploadPage.ts kept)"
+      - "knowledge/pages/upload.yaml: covered_by entry for TC-UPLOAD-002 now points at tests/upload/empty-submit.spec.ts"
+      - "this report: files list"
+    references_left_stale:   # not this agent's files; for the orchestrator to route
+      - "reports/doc-gaps.md:126 'tests/upload/upload-form.spec.ts:80' -> now tests/upload/empty-submit.spec.ts:31 (Doc-Gap)"
+      - "reports/doc-gaps.md:149 'tests/upload/upload-form.spec.ts:53-93' and ':80' on line 151 -> now tests/upload/empty-submit.spec.ts:4-44 and :31 (Doc-Gap)"
+      - "reports/review-log/2026-10-27-TC-UPLOAD-002.yaml:16 'upload-form.spec.ts:80' and :140 'tests/upload/upload-form.spec.ts:53' (Review's log; historical record of that review)"
+      - "self_verify.run_A_live in this report cites upload-form.spec.ts:80; kept as written because it records the run as it happened before the move"
+    verification:   # only what the runs showed
+      list_tc002: "npx playwright test --list --grep @tc:TC-UPLOAD-002: 'Total: 1 test in 1 file', upload\empty-submit.spec.ts:4:7 › Upload form (empty submit) › TC-UPLOAD-002: ..."
+      list_tc001: "npx playwright test --list --grep @tc:TC-UPLOAD-001: 'Total: 1 test in 1 file', upload\upload-form.spec.ts:4:7 › Upload form (file picker) › TC-UPLOAD-001: ..."
+      run_tc002_live: >
+        npx playwright test --grep "@tc:TC-UPLOAD-002" --retries=0: FAILED (1 failed) in step
+        "3. The response is not a server error" at empty-submit.spec.ts:31:86, with
+        'Error: POST /upload status 500 must not be 5xx (DEFECT-001) / expect(received).toBeLessThan(expected)
+        / Expected: < 500 / Received: 500'. Same failure as run_A_live, now at the new location.
+      run_tc001: 'npx playwright test --grep "@tc:TC-UPLOAD-001" --retries=0: PASSED (1 passed, 5.3s)'
+      stub_rerun: "not repeated; the test body is byte-identical to the one that passed run_B_stub"
+      typecheck: "npm run typecheck (tsc --noEmit): exit 0, no output"
+      knowledge: "npm run knowledge: YAML tabs OK; locator traceability (C-LOC-4) OK; exit 0"

@@ -1,0 +1,164 @@
+reviewed: 2026-10-27
+test_case: TC-UPLOAD-002
+batch: reports/codegen-batch-2026-10-27-TC-UPLOAD-002.yaml
+verdict: approved
+
+# Scope: `git diff c8e72bf` plus the untracked batch report. Changes: pages/UploadPage.ts (+2 readonly
+# locators at :29/:35/:43/:44, wider submit() doc comment at :64-66, code unchanged), tests/upload/upload-form.spec.ts
+# (TC-UPLOAD-002 added at :53-93; the diff hunk is additions only after line 49, so TC-UPLOAD-001 at :4-51
+# is byte-for-byte untouched), knowledge/pages/upload.yaml, knowledge/scenario-map.yaml.
+#
+# Reviewer's own runs (2026-10-27, local, retries 0):
+#   npm run typecheck                                  -> clean
+#   npm run knowledge                                  -> YAML tabs OK; C-LOC-4 traceability OK
+#   npx playwright test --grep "@tc:TC-UPLOAD-001"     -> 1 passed (9.5s). No regression.
+#   npx playwright test --grep "@tc:TC-UPLOAD-002"     -> 1 FAILED, as designed, in step
+#       "3. The response is not a server error" at upload-form.spec.ts:80 with
+#       'Error: POST /upload status 500 must not be 5xx (DEFECT-001) / expect(received).toBeLessThan(expected)
+#        / Expected: < 500 / Received: 500'. Matches the batch's run A and run C word for word.
+#   npx playwright test --list --grep "@tc:TC-UPLOAD-002" -> exactly 1 test (C-TC-2).
+#   The committed spec contains no page.route / fulfill (stub not committed, C-DEFECT-3).
+#
+# Checklist A
+#   A1 self-verification (C-DEFECT-3): present and convincing. Live fail (A) -> stub pass (B) -> stub removed,
+#      restored copy verified with cmp, fail again (C) -> TC-001 regression pass. The real failure message is
+#      quoted. The single inference (GET served by the real app via route.fallback) is labelled as one, which
+#      addresses the r4 watch item. The needs_exploration stop (history[0]) was a correct C-AGENT-2 stop, and
+#      the retry was unblocked only after the Explorer recorded the missing facts.
+#   A2 coverage (C-TC-3): steps 1, 3 and 4 asserted. Step 2's "page that tells them to choose a file" branch is
+#      asserted via step 4; the "stays on the form" branch is not covered and the batch says why
+#      (not_generated[1]). This meets C-TC-3; see suggestion 1 for the consequence.
+#   A3 knowledge: both new locators, the 'Internal Server Error' name, the exact message text and the 500 trace
+#      to upload.yaml (elements.empty_submit_error_heading, elements.empty_submit_message, states.empty_submit).
+#   A4 upload path: n/a (no file is chosen; the click is the real form submit).
+#   A5 conventions: no raw locators in the spec (C-LOC-5), no sleeps (C-WAIT-1), steps wrapped (C-ASSERT-3),
+#      status + page both asserted (C-ASSERT-4), fixture used (C-POM-2), locators readonly and no expect in the
+#      page object (C-POM-3), submit() reused rather than a second submitEmpty() (C-POM-4). No new listener, so
+#      C-POM-5 is not engaged. C-ASSERT-5 not engaged (the test never claims "no request").
+#      C-DEFECT-1: tagged @known-defect, no test.fail()/test.fixme(), fails red. C-DEFECT-2: the annotation names
+#      DEFECT-001 and points to reports/doc-gaps.md.
+#   A6 assertion strength: step 4 is an exact toHaveText (C-ASSERT-1). Step 3's absence check is via a
+#      loose-name heading locator, which for an ABSENCE is the stricter direction (it also catches a heading
+#      that merely contains the phrase). One toBeVisible-on-named-locator at :68 (suggestion 3).
+#   A7 C-DEFECT-4: met. The first assertion after submit is the status check, and the live failure is the 500
+#      itself, with DEFECT-001 in the message, not a locator timeout.
+#
+# The orchestrator's specific questions
+#   C-DEFECT-4 / "can each assertion pass against a correct app?":
+#     - :80 status < 500: yes (stub run B).
+#     - :82 #upload-error visible, :83 ISE heading hidden: yes against a fixed server-response page (run B).
+#       Neither has been shown to FAIL on anything (live, :80 throws first). Logically :83 bites on today's
+#       page, because knowledge records the heading there, but no run demonstrated it (suggestion 2).
+#     - :88 exact message: yes if the fix keeps today's wording (run B reused it); a fix that rewords the
+#       message would fail here. That is the C-ASSERT-1 trade-off, see conventions_silent_on.
+#     - :74 submit(): ONLY if the fix still sends POST /upload. A correct app that implements the test case's
+#       other allowed outcome (stay on the form, e.g. `required` on #file-upload, the most common fix) sends no
+#       POST, so waitForResponse times out in step 2 and the test stays red after the defect is fixed, failing
+#       on something incidental. Disclosed by Codegen; no rule covers branching (suggestion 1, escalation).
+#   C-DEFECT-3 / is the stub fair?: yes for the server-response branch. It is the observed defect page with
+#     exactly the two things DEFECT-001 says are wrong changed (500 -> 400, 'Internal Server Error' heading
+#     removed); the #upload-error markup and text are the observed ones. The added <h3>File Uploader</h3> is
+#     invented markup, but no assertion after submit reads that heading, so it neither helps nor hurts the
+#     pass. It was not shaped to fit the assertions. Limits: it models one of the two specified outcomes, and
+#     it only shows the test CAN pass, not that :83 can fail.
+#   C-ASSERT-2: met. :83 (absence of the ISE heading) is preceded by :82 (presence of #upload-error), so it
+#     cannot pass on a blank or unloaded page. The pair is on the same document, which is what the rule asks.
+#   TC-001 untouched and passing: confirmed (diff is additions only; 1 passed).
+#
+# Checklist B (knowledge/pages/upload.yaml, scenario-map.yaml)
+#   B1 both new elements have a `why` (C-KNOW-3); the C-LOC-2 fallback for #upload-error is justified.
+#   B2 states.empty_submit was exercised again (second 500, Navigation Timing evidence), not read off.
+#   B3 not_yet_observed unchanged and still honest; the third session only re-observed the empty submit.
+#      The back link's behaviour is honestly attributed to the first session.
+#   B4 the absence list in states.empty_submit and the new back-link gotcha are observations; the gotcha
+#      carries its fix (C-KNOW-4).
+#   B5 covered_by updated (C-KNOW-6); last_observed 2026-10-27 current (C-KNOW-7). scenario-map status
+#      `in_review` is right while review is open (settled in r2: the orchestrator sets `done` at Stage 6).
+#   No knowledge findings.
+#
+# Carried and NOT re-raised (r3/r4, still open for the human): UploadPage.ts:73 submit() pathname-only
+# predicate vs the exact-URL counter (C-POM-4). This batch reuses submit(), so the drift now also covers
+# TC-UPLOAD-002's status check, but the finding is the same one.
+
+findings:
+  - severity: suggestion
+    file: tests/upload/upload-form.spec.ts
+    line: 74
+    convention_ref: "C-DEFECT-4 (in spirit) / C-TC-1; rubric gap, see conventions_silent_on[0]"
+    issue: >
+      Step 2 calls submit(), which waits for a POST /upload response. The test case allows two correct outcomes:
+      "stays on the upload form" OR "a page that tells them to choose a file". A fix of the first kind (client-side
+      validation such as `required`, no request sent) makes waitForResponse time out in step 2, so the test stays
+      red after DEFECT-001 is fixed, with a timeout instead of the defect. Codegen disclosed this
+      (batch not_generated[1], test_case_disagreements[1], conventions_silent_on[0]).
+    why_it_matters: >
+      A known-defect test is only useful if it turns green when the defect is fixed. Today it does so for one of
+      the two specified fixes. A future red on a fixed app would read as "DEFECT-001 still open" to anyone who
+      skims the annotation.
+    fix: >
+      Do not change the spec on Codegen's own initiative. Route the step-2 ambiguity to Doc-Gap (C-TC-1) so the
+      product owner picks the required fix, and ask the human to rule on branching (conventions_silent_on[0]).
+      If both outcomes must stay valid, a later batch can start a C-ASSERT-5 counter before the click and branch
+      on it (0 POSTs -> assert the form is still shown plus an inline message, once the Explorer can observe one;
+      1 POST -> today's steps 3-4). Until then, extend the annotation description to say "if this fails with a
+      response timeout in step 2, the app may have switched to client-side validation; re-explore".
+
+  - severity: suggestion
+    file: reports/codegen-batch-2026-10-27-TC-UPLOAD-002.yaml
+    line: 67
+    convention_ref: "C-DEFECT-3; partly a rubric gap, see conventions_silent_on[1]"
+    issue: >
+      The stub run proves the test CAN pass. Nothing proves the step-3 heading check (:83) can FAIL: live, the
+      status assertion (:80) throws first, and under the stub the heading is absent. :83 is the only check of the
+      test case's "page does not show 'Internal Server Error'" clause.
+    why_it_matters: >
+      If the server is half-fixed (status changed to 400 but the 'Internal Server Error' heading kept), :83 is
+      the only thing that keeps the test red. Its ability to catch that rests on reasoning, not on a run.
+    fix: >
+      In the next self-verify of this test, add one temporary stub run: 400 + the observed body unchanged
+      (heading 'Internal Server Error' still present). Expect a step-3 failure on emptySubmitErrorHeading
+      toBeHidden. Record it as run B2. No spec change needed.
+
+  - severity: suggestion
+    file: tests/upload/upload-form.spec.ts
+    line: 68
+    convention_ref: C-ASSERT-1
+    issue: >
+      Step 1 checks the Upload button only with toBeVisible() on getByRole('button', { name: 'Upload' }), a
+      loose name match. Same pattern and same grading as TC-UPLOAD-001 :12 (r3/r4 suggestion): a precondition,
+      not the core outcome.
+    why_it_matters: "A button named 'Upload disabled' would satisfy step 1."
+    fix: "await expect(uploadPage.uploadButton).toHaveAccessibleName('Upload'); (or toHaveValue('Upload'), knowledge elements.upload_button attributes)"
+
+  - severity: suggestion
+    file: reports/doc-gaps.md
+    line: 27
+    convention_ref: "C-DEFECT-2 (the linked entry must explain the red result); action for Doc-Gap, C-AGENT-8"
+    issue: >
+      DEFECT-001 still says "the knowledge file records one observed state" (:27) and "Covered by: nothing yet.
+      No @known-defect test exists" (:33). Both are now stale: the 500 is observed twice (states.empty_submit),
+      and tests/upload/upload-form.spec.ts:53 is the covering @known-defect test.
+    why_it_matters: >
+      The annotation sends readers of the red result to this entry. It currently tells them no test covers the
+      defect and that certainty is lower than it is.
+    fix: >
+      Doc-Gap (not Codegen or the reviewer) updates DEFECT-001: Certainty -> "observed twice, 2026-10-27";
+      Covered by -> "tests/upload/upload-form.spec.ts, TC-UPLOAD-002 (@known-defect), fails red at step 3 on
+      status 500". Also add the step-2 ambiguity (suggestion 1) and the stale TC-UPLOAD-002 Notes line.
+
+conventions_silent_on:
+  - "How a @known-defect test should handle a test case that allows more than one correct outcome (TC-UPLOAD-002 step 2: no request + stay on the form, OR a response page). C-DEFECT-3/4 assume one specified behaviour. Raised by Codegen too. A human should decide whether the test must branch (using C-ASSERT-5) or the test case must pick one outcome (Doc-Gap)."
+  - "Whether C-DEFECT-3 self-verify must show that assertions which never run live can FAIL (e.g. a partial-fix stub), or only that the whole test can pass. The rule's stated aim ('not expect(false)') is met for the test as a whole, not per assertion."
+  - "What status and body a C-DEFECT-3 stub should return when the test case does not pin them (raised by Codegen). This review judged 'observed defect page with only the defective parts changed' as fair. A human may want to write that down."
+  - "Whether a known-defect test may pin the exact wording observed on the defective page (step 4, :88) when the test case only says 'a validation message tells the user a file is required'. C-ASSERT-1 pushes for exact text; the fix may legitimately reword it. No rule weighs the two."
+  - "CI runs with retries: 1 (playwright.config.ts), so the deliberately failing test runs twice on CI and is reported failed after a retry. Not changed in this batch; the rubric says nothing about retries for @known-defect tests."
+  - "Carried, still open: core-outcome definition in C-ASSERT-1; exact assertion for <input type=submit>; app origin under configurable BASE_URL; batch-report vs scenario-map `status` naming; `exact: true` on fixed-name locators; first_load_ms purpose."
+
+meta_signal: >
+  C-ASSERT-1 is now raised in a THIRD review log (TC-UPLOAD-001 round 1, round 3, and this one), which is more
+  than two (C-AGENT-9). The cause is the same each time: toBeVisible on a named getByRole standing in for an
+  exact check. agents/codegen-agent.md:47 says only "exact text where the knowledge file records exact text",
+  which did not prevent it. Change the Codegen prompt (not the code): "check every named element with
+  toHaveText / toHaveAccessibleName / toHaveValue; toBeVisible alone is allowed only as the presence half of a
+  C-ASSERT-2 pair." Second signal: the known-defect rules (C-DEFECT-3/4) do not yet address multi-outcome test
+  cases or per-assertion falsifiability; both came up in their first real use and are escalated above.

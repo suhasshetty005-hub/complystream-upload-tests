@@ -1,0 +1,102 @@
+reviewed: 2026-10-27
+test_case: TC-UPLOAD-002
+batch: reports/codegen-batch-2026-10-27-TC-UPLOAD-002.yaml
+round: 2   # fix_rounds[0]: structural move only (requested by the human)
+verdict: approved
+
+# Scope: the move of TC-UPLOAD-002 from tests/upload/upload-form.spec.ts:53-93 to the new
+# tests/upload/empty-submit.spec.ts, plus the references it touched (scenario-map files, upload.yaml covered_by,
+# batch report). The separate-file decision is the human's (fix_rounds[0].overrides_default) and is not reviewed.
+# Round-1 findings (suggestions 1-4) are not re-raised: none of the code they point at changed. Only their line
+# numbers moved (round-1 :68/:74/:80/:82/:83/:88 are now empty-submit.spec.ts :19/:25/:31/:33/:34/:39).
+#
+# Reviewer's own checks (2026-10-27, local, retries 0):
+#   git diff c8e72bf -- tests/upload/upload-form.spec.ts -> empty; md5 of the working file equals
+#     `git show c8e72bf:tests/upload/upload-form.spec.ts` (f2a5ac5b...). TC-UPLOAD-001 is untouched.
+#   npm run typecheck                                   -> clean (tsc --noEmit, no output)
+#   npm run knowledge                                   -> YAML tabs OK; C-LOC-4 traceability OK
+#   npx playwright test --list --grep "@tc:TC-UPLOAD-00" -> 2 tests in 2 files:
+#     upload\empty-submit.spec.ts:4:7 > Upload form (empty submit) > TC-UPLOAD-002: ...
+#     upload\upload-form.spec.ts:4:7  > Upload form (file picker)  > TC-UPLOAD-001: ...
+#     So each @tc grep selects exactly one test (C-TC-2).
+#   npx playwright test --grep "@tc:TC-UPLOAD-002"      -> 1 FAILED, as designed, in step
+#     "3. The response is not a server error" at empty-submit.spec.ts:31:86 with
+#     'Error: POST /upload status 500 must not be 5xx (DEFECT-001) / Expected: < 500 / Received: 500'.
+#     Same failure as round 1 (then :80), now at the new location. On the 500 itself, not a timeout (C-DEFECT-4).
+#   npx playwright test --grep "@tc:TC-UPLOAD-001"      -> 1 passed (6.5s).
+#
+# Body unchanged: the pre-move file was never committed, so it cannot be diffed against git. Evidence used
+#   instead: (1) Codegen's cmp of old :53-93 vs new :4-44 (fix_rounds[0].change); (2) every line the round-1 log
+#   cites maps to the same statement at a constant offset of -49 (:68 uploadButton toBeVisible -> :19,
+#   :74 submit() -> :25, :80 status < 500 -> :31, :82 message toBeVisible -> :33, :83 heading toBeHidden -> :34,
+#   :88 exact toHaveText -> :39, :93 closing `);` -> :44); (3) the live failure is identical. Indentation is
+#   unchanged because the test sits inside a test.describe in both files. Accepted as unchanged.
+# Describe / imports / fixture (C-POM-2): `import { test, expect } from '../fixtures'`, the same module as
+#   upload-form.spec.ts; `files` correctly not imported (unused by TC-002; tsc clean). The test takes
+#   `{ uploadPage }` from the fixture; no `new UploadPage`, no raw locators (C-LOC-5), no page.route/fulfill
+#   (stub not committed, C-DEFECT-3). Describe 'Upload form (empty submit)' parallels 'Upload form (file picker)'.
+# Tags and annotation (C-TC-2, C-DEFECT-1/2): title, tags ['@tc:TC-UPLOAD-002', '@upload', '@known-defect'] and
+#   the known-defect annotation naming DEFECT-001 and reports/doc-gaps.md are intact; no test.fail()/fixme().
+# Self-verification for the round: list, live fail, TC-001 pass, typecheck and knowledge gates are recorded with
+#   the real failure message. Not repeating the stub run is acceptable for a byte-identical body
+#   (fix_rounds[0].verification.stub_rerun); the round-1 stub evidence still applies.
+#
+# Checklist B (references only)
+#   knowledge/scenario-map.yaml TC-UPLOAD-002 files: pages/UploadPage.ts + tests/upload/empty-submit.spec.ts.
+#     Correct. tests/fixtures/index.ts is not listed (TC-001 lists it); it is unchanged and only consumed, so
+#     not a finding.
+#   knowledge/pages/upload.yaml covered_by: "tests/upload/empty-submit.spec.ts (TC-UPLOAD-002, @known-defect
+#     DEFECT-001)" and the TC-001 entry unchanged. Correct (C-KNOW-6).
+#   Batch report: files list correct; references_left_stale is honest for doc-gaps.md and the round-1 log.
+#     One stale line it did not list: suggestion 1.
+#
+# Observation, not caused by the move: scenario-map TC-UPLOAD-002 status is `done`, while batch
+#   knowledge_updated[0] says `in_review`. Consistent with round 1's note that the orchestrator sets `done` at
+#   Stage 6 after approval; this round's move did not touch status. Left to the orchestrator.
+
+findings:
+  - severity: suggestion
+    file: reports/codegen-batch-2026-10-27-TC-UPLOAD-002.yaml
+    line: 12
+    convention_ref: "C-KNOW-6 (covered_by must be traceable); batch-report accuracy itself is a rubric gap, see conventions_silent_on[0]"
+    issue: >
+      knowledge_updated[1] still reads "covered_by += 'tests/upload/upload-form.spec.ts (TC-UPLOAD-002, ...)'".
+      The knowledge file now says tests/upload/empty-submit.spec.ts. fix_rounds[0].references_updated says only
+      "this report: files list" was updated, and references_left_stale does not list this line (it lists
+      run_A_live, which is kept on purpose as a historical run record; this line is not a run record).
+    why_it_matters: >
+      The batch report contradicts the knowledge file it claims to describe. Anyone tracing covered_by from the
+      report goes to the wrong spec.
+    fix: >
+      Codegen changes knowledge_updated[1] to "covered_by += 'tests/upload/empty-submit.spec.ts (TC-UPLOAD-002,
+      @known-defect DEFECT-001)' (path updated in fix round 1)", or adds the line to references_left_stale with
+      the reason it is kept.
+
+  - severity: suggestion
+    file: reports/doc-gaps.md
+    line: 126
+    convention_ref: "C-DEFECT-2 (the linked entry must explain the red result); action for Doc-Gap, C-AGENT-8"
+    issue: >
+      The TC-UPLOAD-002 section that the annotation sends readers to still locates the test at
+      tests/upload/upload-form.spec.ts:80 (:126), tests/upload/upload-form.spec.ts:53-93 (:149) and :80/:83/:88
+      (:151-153 and later). After the move these are empty-submit.spec.ts:31 (status), :4-44 (test), :34
+      (heading hidden), :39 (exact message), :25 (submit). Codegen correctly routed this
+      (references_left_stale[0..1]) rather than editing Doc-Gap's file. This is new staleness from the move, not
+      round-1 suggestion 4.
+    why_it_matters: >
+      A reader of the red result who follows the annotation to DEFECT-001 is pointed at a file where the
+      test no longer exists.
+    fix: >
+      Doc-Gap updates the file:line references in the 2026-10-27 TC-UPLOAD-002 section to
+      tests/upload/empty-submit.spec.ts with the new line numbers above. No other change.
+
+conventions_silent_on:
+  - "Whether a batch report's earlier sections (knowledge_updated, files, self_verify) must be rewritten after a later fix round changes a path, or kept as history with a note. Codegen kept run_A_live as history and updated files; it left knowledge_updated stale without saying so. A human may want one rule."
+  - "Spec file naming and describe-block naming. The 'one file per area' default lives in agents/codegen-agent.md, not in the rubric, and the human overrode it here. Not flagged."
+  - "Which files a scenario-map `files` list must include (TC-001 lists tests/fixtures/index.ts, TC-002 omits it although it consumes it unchanged)."
+  - "Carried, still open from round 1 (not re-raised): multi-outcome known-defect tests; per-assertion falsifiability under C-DEFECT-3; stub status/body choice; pinning observed wording; CI retries for @known-defect."
+
+meta_signal: >
+  No rule id is raised for a third time in this round. Stale references after a file move appear in two places
+  (batch report, doc-gaps.md). If moves become common, the Codegen prompt should require a repo-wide grep for the
+  old path as part of the move, and list every hit as either updated or deliberately kept.
