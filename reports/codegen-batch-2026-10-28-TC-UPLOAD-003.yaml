@@ -1,0 +1,154 @@
+batch_date: 2026-10-28
+test_case: TC-UPLOAD-003
+status: done   # generated and self-verified; scenario-map set to in_review pending the Reviewer
+files:
+  - pages/UploadPage.ts               # 3 readonly locators, dropFile(), private waitForUploadPost()
+  - tests/upload/TC-UPLOAD-003-drag-drop.spec.ts    # new file, TC-UPLOAD-003 only; renamed per C-TC-4 in fix round 1
+file_choice: >
+  New spec file tests/upload/TC-UPLOAD-003-drag-drop.spec.ts (describe 'Upload drag-and-drop zone'), one
+  file per test case. First named for what it covers, under the human's stated preference for one file per
+  scenario and the earlier "one file per area" default; renamed to the <ID>-<short-slug>.spec.ts form in
+  fix round 1 (C-TC-4).
+knowledge_updated:
+  - "knowledge/scenario-map.yaml: TC-UPLOAD-003 status explored -> in_review; files: pages/UploadPage.ts, tests/upload/TC-UPLOAD-003-drag-drop.spec.ts"
+  - "knowledge/pages/upload.yaml: covered_by += 'tests/upload/TC-UPLOAD-003-drag-drop.spec.ts (TC-UPLOAD-003)' (C-KNOW-6)"
+reused:
+  - "pages/UploadPage.ts: goto(), heading, fileInput, uploadButton, resultHeading, uploadedFiles, trackUploadPosts() (C-POM-4)"
+  - "tests/fixtures/index.ts: uploadPage fixture and files.sampleTxt, unchanged"
+  - "submit()'s POST /upload response predicate moved into private waitForUploadPost(), now shared by submit() and dropFile(); predicate unchanged, so there is still one way to wait for the upload POST (C-POM-4). TC-UPLOAD-001/002 re-run after the change (see self_verify)."
+
+coverage_check:
+  - step: 1
+    covered: true
+    facts: "elements.drag_drop_zone (#drag-drop-upload, C-LOC-2), states.initial ('An empty red-dashed drop zone below'), elements.heading, elements.file_input"
+  - step: 2
+    covered: true
+    facts: "states.drag_drop trigger (drop alone suffices) and request (one XHR POST /upload -> 200, not a navigation); gotchas (arm waitForResponse before the drop)"
+  - step: 3
+    covered: true
+    facts: "elements.dropzone_preview (exactly 1, 'dz-success' class), elements.dropzone_file_name (exact 'sample.txt'), elements.dropzone_success_mark (not evidence)"
+  - step: 4
+    covered: true
+    facts: "states.drag_drop observed: h3 'File Uploader', #file-upload value '', #file-submit value 'Upload', #uploaded-files absent"
+
+page_object_changes:
+  - "dropZone = page.locator('#drag-drop-upload') (elements.drag_drop_zone; C-LOC-2, reason in doc comment)"
+  - "dropzonePreview = page.locator('#drag-drop-upload .dz-preview') (elements.dropzone_preview; C-LOC-3, reason in doc comment)"
+  - "dropzoneFileName = page.locator('#drag-drop-upload [data-dz-name]') (elements.dropzone_file_name; C-LOC-3, reason in doc comment)"
+  - >
+    dropFile(filePath, mimeType = 'text/plain'): Promise<Response>. Reads the fixture's bytes with
+    fs.readFileSync at call time and base64-encodes them (C-IO-1; nothing hard-coded in the spec),
+    builds a DataTransfer holding File([bytes], basename, { type }) via page.evaluateHandle, then
+    Promise.all([waitForUploadPost(), dropZone.dispatchEvent('drop', { dataTransfer })]) (C-IO-2,
+    C-IO-3). Disposes the DataTransfer handle in finally. No setInputFiles, no click on the zone,
+    no use of input.dz-hidden-input (dropzone_hidden_input was deliberately NOT added to the page object).
+  - "Not added: dropzoneSuccessMark. The knowledge file says the ✔ is static markup and proves nothing, so no assertion needs it."
+
+spec:
+  title: "TC-UPLOAD-003: Drop a file onto the drag-and-drop zone"
+  tags: ['@tc:TC-UPLOAD-003', '@upload']
+  grep_selection: "npx playwright test --list --grep @tc:TC-UPLOAD-003: 'Total: 1 test in 1 file', upload\\drag-drop.spec.ts:4:7 (C-TC-2)"
+
+steps_mapped:
+  - step: 1
+    to: >
+      uploadPage.goto(); expect(heading).toHaveText('File Uploader'); expect(fileInput).toBeVisible();
+      expect(dropZone).toBeVisible(); then boundingBox() of fileInput and dropZone and
+      expect(zoneBox.y).toBeGreaterThanOrEqual(chooserBox.y + chooserBox.height) for "below the file chooser"
+  - step: 2
+    to: >
+      const response = uploadPage.dropFile(files.sampleTxt); status asserted 2xx (>= 200 and < 300,
+      the test case's range; 200 observed); expect(response.request().isNavigationRequest()).toBe(false)
+      (the upload happened without the form/Upload button: Dropzone's XHR, not a navigation) (C-ASSERT-4)
+  - step: 3
+    to: >
+      expect(dropzonePreview).toHaveCount(1); expect(dropzonePreview).toHaveClass(/\bdz-success\b/);
+      expect(dropzoneFileName).toHaveText('sample.txt') (exact, C-ASSERT-1)
+  - step: 4
+    to: >
+      Presence: expect(heading).toHaveText('File Uploader'); expect(fileInput).toHaveValue('');
+      expect(uploadButton).toHaveValue('Upload'). Absence: expect(resultHeading).toBeHidden();
+      expect(uploadedFiles).toBeHidden() (C-ASSERT-2). Request count: trackUploadPosts() started
+      before the drop, read after step 3 waited for dz-success: expect(count()).toBe(1), the drop's
+      XHR only; listener removed in finally (C-ASSERT-5, C-POM-5).
+
+self_verify:   # C-AGENT-4. Only what the runs showed; inferences are marked.
+  command: 'npx playwright test --grep "@tc:TC-UPLOAD-003" --retries=0'
+  run_1_pass: >
+    PASSED (1 passed, 9.8s test / 11.6s total). This is the first run of the Playwright form
+    evaluateHandle(DataTransfer) + locator.dispatchEvent('drop', { dataTransfer }); it produced a
+    2xx POST /upload response and a preview with 'dz-success' and name 'sample.txt' (every assertion
+    in the test passed).
+  run_2_inverted: >
+    Changed step 3's file-name assertion to toHaveText('wrong.txt'). FAILED (1 failed, 16.0s) in step
+    "3. The zone shows the file was accepted, with its name sample.txt" at drag-drop.spec.ts:45:53 with
+    'Error: expect(locator).toHaveText(expected) failed / Locator: locator('#drag-drop-upload [data-dz-name]')
+    / Expected: "wrong.txt" / Received: "sample.txt" / Timeout: 10000ms', call log
+    '23 × locator resolved to <span data-dz-name="">sample.txt</span> - unexpected value "sample.txt"'.
+    Steps 1 and 2 passed in this run (the failure was reached at step 3).
+  run_3_reverted: >
+    Restored the spec from a copy taken before the inversion; cmp reported IDENTICAL and grep found
+    0 occurrences of 'wrong.txt'. PASSED (1 passed, 6.0s test / 7.0s total).
+  regression_TC_UPLOAD_001: 'npx playwright test --grep "@tc:TC-UPLOAD-001" --retries=0: PASSED (1 passed, 6.3s), after the waitForUploadPost() refactor'
+  regression_TC_UPLOAD_002: >
+    npx playwright test --grep "@tc:TC-UPLOAD-002" --retries=0: FAILED as designed (@known-defect
+    DEFECT-001) at empty-submit.spec.ts:31 with 'Error: POST /upload status 500 must not be 5xx
+    (DEFECT-001) / Expected: < 500 / Received: 500'. Same failure as before the refactor.
+  not_proven_by_runs: >
+    The inversion targeted the file-name assertion only. The status, isNavigationRequest, dz-success,
+    count and step-4 assertions were seen to pass but were not individually inverted. Inference
+    (not run): the count assertion would catch a form POST because the tracker filters the same
+    exact URL the drop XHR used and it counted that one.
+  gates:
+    typecheck: "npm run typecheck (tsc --noEmit): no output, no errors (after the final code state)"
+    knowledge: "npm run knowledge: YAML tabs OK; locator traceability (C-LOC-4) OK"
+
+not_generated:
+  - >
+    Proof the server stored the file (the XHR response body contains #uploaded-files 'sample.txt',
+    per gotchas). The test case does not ask for it (step 2 asks only for a 2xx), so it is not asserted.
+  - >
+    The ✔ mark (elements.dropzone_success_mark): not asserted, because the knowledge file records it
+    as static markup present before the server answers. 'dz-success' on the preview is used instead.
+  - "dragenter/dragover: not dispatched; knowledge states.drag_drop records that 'drop' alone uploaded identically."
+
+test_case_disagreements:   # for Doc-Gap; the test case was not edited (C-TC-1)
+  - >
+    Notes say what the zone shows after a drop is 'NOT YET OBSERVED' and the immediate upload has
+    'not been seen happen'. Both are now observed (knowledge states.drag_drop, 2026-10-28), so these
+    notes are stale.
+  - >
+    Step 3 says the zone "shows that the file was accepted". The only visible acceptance cue, the ✔,
+    is shown before the server answers (knowledge gotchas), so what a user sees does not distinguish
+    accepted from pending. The test uses the 'dz-success' class, which is not user-visible. Possible
+    usability/doc gap for Doc-Gap to classify.
+
+conventions_silent_on:
+  - >
+    Asserting layout ("below the file chooser") with a bounding-box comparison. C-LOC-3 forbids
+    identifying elements by position but says nothing about asserting relative position; C-WAIT-2
+    prefers web-first assertions, and boundingBox() is a one-off read (taken after both elements
+    were asserted visible).
+  - >
+    C-ASSERT-5 asks for the running total to be re-checked "after a later action known to send one".
+    Here the drop itself is the action that sends one and there is no later action; the count is read
+    after step 3's web-first wait for 'dz-success' (the end of the upload), and is expected to be 1.
+  - "Whether a page-object action may read fixture bytes from disk (fs) itself, rather than the fixture supplying them. Done in dropFile(), as the task suggested."
+
+fix_rounds:
+  - round: 1
+    date: 2026-10-28
+    kind: structural_rename   # no review findings applied; no test code changed
+    requested_by: human
+    change: >
+      Renamed tests/upload/drag-drop.spec.ts -> tests/upload/TC-UPLOAD-003-drag-drop.spec.ts per C-TC-4,
+      with a plain mv because the file was untracked. Contents byte-identical (md5
+      e849215d0a3d9d0ad4255c8c6a53cb83 before and after). Live references updated: this report's files,
+      file_choice and knowledge_updated lines, knowledge/scenario-map.yaml files, and
+      knowledge/pages/upload.yaml covered_by. spec.grep_selection, self_verify, the review log and
+      reports/doc-gaps.md are dated records and keep the old name.
+    verification: >
+      npx playwright test --list: 'Total: 3 tests in 3 files', this one as
+      upload\TC-UPLOAD-003-drag-drop.spec.ts:4:7; --grep @tc:TC-UPLOAD-003 lists exactly 1 test.
+      npx playwright test --grep "@tc:TC-UPLOAD-003" --retries=0: PASSED (1 passed, 4.6s). No inversion
+      re-run: the test body is byte-identical. npm run typecheck clean; npm run knowledge clean.

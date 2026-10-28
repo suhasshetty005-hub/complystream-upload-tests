@@ -2,7 +2,8 @@
 
 Tool: **Claude Code** (VS Code extension), model Claude Opus 5.5.
 This log lists my prompts in order, what the tool did with each one, and where I had to
-correct it. Prompts are verbatim apart from typo fixes.
+correct it. Prompts are verbatim apart from typo fixes. Names from an earlier client project
+are replaced with *[previous project]* placeholders.
 
 ---
 
@@ -49,7 +50,7 @@ orchestrator, the conventions rubric and the knowledge template.
 
 ### Prompts 4–6: checking the port
 > Are they general, that can be used for any project? Have you checked whether there is any
-> MainManager data in it? Or do we need to write specific agent data based on the project URL?
+> *[previous project]* data in it? Or do we need to write specific agent data based on the project URL?
 
 > Should I do that split now, or leave it? What do you suggest? / What exactly do we mean by
 > "leave the split for later"?
@@ -110,9 +111,9 @@ written.
 > /automate TC-UPLOAD-001
 
 **Where it went wrong:** the session was still open in my previous project, which also has an
-`/automate` command, so Claude Code loaded **that** one: "Automate Zephyr test case…", MainManager
-credential checks, the old `mm-*` agents. The AI spotted the Zephyr and MainManager references
-and stopped at preflight without running anything. On the second attempt it planned to work
+`/automate` command, so Claude Code loaded **that** one: it fetched test cases from a
+test-management tool, checked that project's credentials, and used the old project's agents.
+The AI spotted the references to the other project and stopped at preflight without running anything. On the second attempt it planned to work
 around the problem by following the new repo's file by hand. I interrupted that.
 
 ### Prompt 10
@@ -186,4 +187,116 @@ only what a run showed.
 - C-ASSERT-1 has now come up in 2 review logs. One more crosses the C-AGENT-9 threshold for
   adding it to the Codegen prompt.
 
-*(continues as each test case is automated)*
+### Prompt 14
+> Yes *(commit locally)*
+
+**What it did:** made the first commit (framework plus TC-001) on `main`. Nothing was pushed.
+It flagged that Git on Windows converts the `sample.txt` fixture to CRLF on checkout, which
+changes its size. That was fixed later with `.gitattributes`.
+
+### Prompt 15
+> shall i run next test case now ?
+
+**What it did:** recommended TC-002 next, because its state had already been observed. It also
+suggested applying the review lessons to the Codegen prompt first. I went ahead without that,
+which cost a repeat finding (see Prompt 16).
+
+### Prompt 16: TC-UPLOAD-002, the deliberately failing test
+> /pw-automate TC-UPLOAD-002
+
+**What it did:** Explorer (one targeted loop) → Codegen → Review → Doc-Gap → gates. The result is
+a `@known-defect` test that fails red on `POST /upload -> 500` (DEFECT-001). Self-verify followed
+C-DEFECT-3: it failed against the live app, passed against a `page.route()` stub of the correct
+behaviour, and failed again with the stub removed. TC-001 still passed.
+**Where it went wrong:**
+- **The orchestrator skipped the Explorer too early.** The knowledge file *described* the error
+  page but had no locator entries for the message or the "Internal Server Error" heading. The
+  heading was only mentioned in a note. Codegen correctly refused to guess and returned
+  `blocked: needs_exploration`, naming exactly those facts. One Explorer loop added them
+  (`#upload-error`, whose text is exact with no extra whitespace) and confirmed the 500 a second
+  time. Lesson: "the state is described" is not the same as "the elements are recorded".
+- **The knowledge check has a hole.** `npm run knowledge` passed with the heading recorded only
+  in a note, because it checks that the locator text appears somewhere, not that it is a proper
+  element entry.
+- **Codegen repeated the loose check:** the Upload button was again asserted only with
+  `toBeVisible`. That made C-ASSERT-1 a finding in a third review log, which crosses the rubric's
+  "more than two" threshold. The fix belongs in the Codegen prompt.
+- **The stub only proves part of it.** It models only one of the two outcomes the test case allows,
+  and it never shows that the heading-absence check can fail.
+**Doc-Gap:** the test case itself is ambiguous. Step 2 allows "stay on the form" (browser-side
+check, no request) *or* "a page telling the user to choose a file". The status code and the
+message wording are not specified either. If the bug is fixed the browser-side way, the test
+would time out instead of turning green. These are product-owner decisions, not test fixes.
+
+### Prompt 17
+> Can we create a separate file for TC-UPLOAD-002?
+
+**What it did:** Codegen moved the test unchanged (checked byte for byte) into its own spec, and
+a review confirmed the move. Doc-Gap may only append, so it added a table mapping the old line
+references to the new ones instead of rewriting its earlier findings.
+**Where it went wrong:** stale references were missed in two places: a batch-report line and the
+Doc-Gap agent's own example. The Reviewer suggested a rule: after moving a file, grep the repo
+for the old path. That became part of C-TC-4 (Prompt 21).
+
+### Prompt 18: reading the doc-gaps report
+> So much of data in doc-gaps.md, what is it trying to say?
+
+**What it did:** summarised the file in plain terms. One real bug (DEFECT-001), four decisions
+only the product owner can make, one claim a test can never prove (that a file was *stored*),
+and small wording fixes.
+**Correction:** the report was too long to act on. From TC-003 on, Doc-Gap was told to lead each
+section with a 3–5 line **"Decisions needed"** summary.
+
+### Prompt 19
+> Okay first commit
+
+**What it did:** committed the TC-002 work before starting TC-003, so each test case lands as its
+own commit.
+
+### Prompt 20: TC-UPLOAD-003, drag-and-drop
+> /pw-automate TC-UPLOAD-003
+
+**What it did:** the Explorer produced a *real* drop: a `drop` DragEvent on `#drag-drop-upload`
+whose DataTransfer carries the fixture's bytes. It found that `drop` alone is enough, that the
+upload is an XHR (`POST /upload -> 200`, no navigation), and that the ✔ mark is static markup shown
+*before* the server answers. Codegen wrote `dropFile()`, reading the fixture with `fs` at run time.
+This was the first run of the Playwright form of the drop. The review approved it first time,
+with no blockers.
+**What went right:** the mistake the test case predicted, `setInputFiles` on Dropzone's hidden
+input (C-IO-3), did not happen. Both agents had been told explicitly that it would be blocked.
+This was also the first batch without the `toBeVisible`-instead-of-text pattern.
+**Where it went wrong or overclaimed:**
+- `/\bdz-success\b/` also matches the class `dz-success-mark`, which the page uses. It works only
+  because the preview element doesn't carry that class. Fix: `toContainClass('dz-success')`.
+- A spec comment cited the knowledge file for the file input's position, which was never recorded.
+- Only the file-name assertion was inverted, so the step-2 guards (no navigation, exactly one
+  POST) were never seen to fail. This is the second review to raise per-assertion falsifiability.
+- Codegen refactored `submit()` into a shared helper during this batch. The Reviewer re-ran TC-001
+  and TC-002 to confirm nothing changed.
+**Doc-Gap:** "the zone shows the file was accepted" is unverifiable from the user's side: nothing
+visible distinguishes *uploaded* from *pending*. "Did not reset the form" can never fail, because
+the form was empty before the drop. A real drag from the desktop still needs a manual check.
+
+### Prompt 21
+> Can we name them based on test case id? so its easy to track?
+
+**Decision:** new rule **C-TC-4**: one spec per test case, named `<ID>-<slug>.spec.ts`, and after
+any rename, grep the repo for the old path. The Codegen prompt was updated to match. Codegen
+renamed the three specs with `git mv`; checksums were the same before and after. It updated the
+live references (scenario map, `covered_by`, batch reports, agent examples) and left dated
+records (review logs, doc-gaps) as written.
+
+### Prompt 22: checking against the brief
+> What is pending here? *(pasted the take-home brief)*
+
+**What it did:** checked the repo against each requirement. The tests and the deliberate failure
+were done. Missing were the "what I couldn't cover and what I'd need" write-up, this log from
+Prompt 14 on, a note that `npm test` exits non-zero by design, a clean-clone check, and delivery.
+It also flagged names from my earlier client project in Prompts 4–9, which are now placeholders.
+
+### Prompt 23
+> Yes
+
+**What it did:** added the Results and "What I couldn't cover" sections to the README, the
+`.gitattributes` rule for fixtures, and this log; then committed and ran the one documented
+command from a fresh clone.

@@ -37,8 +37,8 @@ Load the test case, its scenario-map entry and 1–3 knowledge files. Never read
    fixture in `tests/fixtures/index.ts` exists, add to it. On the first run, create both, following
    C-POM-1..3.
 
-3. **Write the spec** in `tests/upload/`, one file per area (e.g. `upload-form.spec.ts`,
-   `drag-and-drop.spec.ts`). Title the test `<ID>: <title>` and tag it `@tc:<ID>` (C-TC-2).
+3. **Write the spec** in `tests/upload/`, one file per test case, named
+   `<ID>-<short-slug>.spec.ts` (e.g. `TC-UPLOAD-001-upload-form.spec.ts`, C-TC-4). Title the test `<ID>: <title>` and tag it `@tc:<ID>` (C-TC-2).
    Wrap each test-case step in `test.step()` (C-ASSERT-3).
 
 4. **Obey the conventions.** These are the ones most often broken:
@@ -76,7 +76,7 @@ The code, plus a batch report at `reports/codegen-batch-<YYYY-MM-DD>-<ID>.yaml`:
 batch_date: YYYY-MM-DD
 test_case: TC-UPLOAD-001
 status: done
-files: [pages/UploadPage.ts, tests/fixtures/index.ts, tests/upload/upload-form.spec.ts]
+files: [pages/UploadPage.ts, tests/fixtures/index.ts, tests/upload/TC-UPLOAD-001-upload-form.spec.ts]
 reused: []
 steps_mapped:
   - step: 1

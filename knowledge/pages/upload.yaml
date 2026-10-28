@@ -6,13 +6,18 @@
 # Third session, 2026-10-27 (scope: TC-UPLOAD-002, empty-submit page only, no file uploaded):
 # re-observed the empty submit (POST /upload -> 500 again) and recorded the error heading and the
 # validation message as elements, plus which form elements are absent from the error page.
+# Fourth session, 2026-10-28 (scope: TC-UPLOAD-003, drag-and-drop only): produced a real drop on
+# #drag-drop-upload with browser_evaluate (no browser_file_upload, no setInputFiles, no click on
+# the zone). The File was built in-page from the exact 72 bytes of tests/fixtures/files/sample.txt
+# (read from disk, base64 Q29tcGx5U3RyZWFtIHVwbG9hZCB0ZXN0IGZpeHR1cmUuIEhhcm1sZXNzIHBsYWluIHRleHQsIHNhZmUgdG8gcHVibGlzaC4K).
+# Dropped twice on two fresh loads: dragenter+dragover+drop, then drop alone. Both uploaded.
 
 page: upload
 title: File Uploader
 url: /upload
-last_observed: 2026-10-27
+last_observed: 2026-10-28
 observed_on: "https://the-internet.herokuapp.com (no version string visible; footer says 'Powered by Elemental Selenium and Sauce Labs')"
-first_load_ms: 2823  # The largest first load seen. Navigation Timing duration of the first GET /upload in the second session (responseStart 776 ms, 200). The first session measured 865 ms (responseStart 708 ms). Whether either hit a cold dyno is unknown, so this is not a confirmed cold-start figure.
+first_load_ms: 5606  # The largest first load seen. Navigation Timing duration of the first GET /upload in the fourth session, 2026-10-28 (responseStart 773 ms, 200; most of the time was after the first byte). Earlier sessions measured 2823 ms (responseStart 776 ms) and 865 ms (responseStart 708 ms). Whether any hit a cold dyno is unknown, so this is not a confirmed cold-start figure.
 
 elements:
   - name: heading
@@ -42,14 +47,32 @@ elements:
   - name: drag_drop_zone
     locator: "page.locator('#drag-drop-upload')"
     why: "Absent from the accessibility snapshot (an empty div with no role or name), so role-based location is impossible. Fall back to the DOM id (C-LOC-2)."
-    attributes: 'id="drag-drop-upload" class="dz-success-mark dz-clickable"; outerHTML is an empty div; 400x400 px at x=316, y=358 in a 1600-wide viewport'
-    notes: "Renders as an empty box with a red dashed border below the Upload button. The 'dz-' classes indicate a Dropzone-style widget; its behaviour on drop was NOT observed."
+    attributes: 'id="drag-drop-upload" class="dz-success-mark dz-clickable"; outerHTML before a drop is exactly <div class="dz-success-mark dz-clickable" id="drag-drop-upload">\n</div>; 400x400 px (x=316 in a 1600-wide viewport, x=148 in a 1280-wide one; y=358)'
+    notes: "Renders as an empty box with a red dashed border below the Upload button. It is a Dropzone.js 4.0.1 instance (window.Dropzone.version '4.0.1', Dropzone.instances.length 1, element.dropzone set), created by the inline script $('div#drag-drop-upload').dropzone({ url: '/upload', previewTemplate: $('#preview-template').html() }). Effective options read from element.dropzone.options: url '/upload', method 'POST', paramName 'file', autoProcessQueue true, uploadMultiple false, parallelUploads 2, maxFilesize 256, acceptedFiles null, maxFiles null, clickable true, previewsContainer null (previews go inside the zone itself), withCredentials false. Class changes seen: dragenter/dragover add 'dz-drag-hover'; drop removes it and adds 'dz-started' (zone class after a drop: 'dz-success-mark dz-clickable dz-started'). Before a drop it is absent from the accessibility snapshot; after a drop it appears as an unnamed generic containing generic 'sample.txt' and generic '✔'."
+
+  - name: dropzone_preview
+    locator: "page.locator('#drag-drop-upload .dz-preview')"
+    why: "Added by Dropzone inside the zone on drop. The snapshot shows it only as an unnamed generic (no role, no name, no id), so C-LOC-1 and C-LOC-2 are impossible. '.dz-preview' is the class Dropzone's own preview template uses, scoped to the zone id (C-LOC-3)."
+    attributes: 'Built from the hidden #preview-template: <div class="dz-preview dz-file-preview"><div class="dz-details"><div class="dz-filename"><span data-dz-name></span></div></div><div class="dz-success-mark"><span>✔</span></div></div>. No size element ([data-dz-size] count 0), no error-message element ([data-dz-errormessage] / .dz-error-message count 0), no progress bar, no thumbnail.'
+    notes: "Exactly 1 after one drop. Class sequence observed: immediately after the drop event 'dz-preview dz-file-preview'; once the upload finishes 'dz-preview dz-file-preview dz-processing dz-success dz-complete'. Assert the 'dz-success' class (e.g. toHaveClass(/\\bdz-success\\b/)) to prove acceptance; 'dz-error' was never seen. textContent is JSON \"\\n    \\n      sample.txt\\n    \\n    ✔\\n  \"; innerText is \"sample.txt\\n✔\"."
+
+  - name: dropzone_file_name
+    locator: "page.locator('#drag-drop-upload [data-dz-name]')"
+    why: "Shown in the snapshot only as an unnamed generic with text 'sample.txt' (no role or name, C-LOC-1 impossible; no id, C-LOC-2 impossible). [data-dz-name] is the attribute Dropzone fills with the file name (C-LOC-3), scoped to the zone."
+    attributes: '<span data-dz-name="">sample.txt</span>, inside div.dz-filename inside div.dz-details'
+    notes: "textContent and innerText are both exactly 'sample.txt' (no surrounding whitespace), so an exact toHaveText('sample.txt') matches. After the drop it is the ONLY element on the page whose own text contains 'sample.txt' (the file chooser's 'No file chosen' is native and not in the DOM), so getByText('sample.txt', { exact: true }) would also resolve to it, but the scoped locator is safer if the form flow is ever exercised in the same test. The name is filled immediately on drop (before the request completes)."
+
+  - name: dropzone_success_mark
+    locator: "page.locator('#drag-drop-upload .dz-preview .dz-success-mark')"
+    why: "Unnamed generic '✔' in the snapshot (C-LOC-1/2 impossible). Must be scoped under .dz-preview because the zone itself also carries the class 'dz-success-mark' (C-LOC-3)."
+    attributes: '<div class="dz-success-mark"><span>✔</span></div>; textContent and innerText exactly "✔"; computed display block, visibility visible, opacity 1'
+    notes: "NOT evidence of success: it is static template markup, present and display:block immediately after the drop event, before the XHR completed and while the preview had no dz-success class. Use dropzone_preview's 'dz-success' class plus the POST /upload response instead."
 
   - name: dropzone_hidden_input
     locator: "page.locator('input.dz-hidden-input')"
     why: "Recorded so nobody targets it by accident. Has no id. The class is the only distinguishing attribute."
     attributes: 'type="file" multiple="multiple" class="dz-hidden-input" style="visibility: hidden; position: absolute; top: 0px; left: 0px; height: 0px; width: 0px;"'
-    notes: "A direct child of <body>, outside the <form>. Not part of the file-picker flow. It still had files.length 0 after sample.txt was chosen through #file-upload."
+    notes: "A direct child of <body>, outside the <form>. Not part of the file-picker flow. It still had files.length 0 after sample.txt was chosen through #file-upload, and also files.length 0 after a real drop on #drag-drop-upload (the drop path does not go through this input). Setting files on it is NOT the drop path (C-IO-3)."
 
   - name: result_heading
     locator: "page.getByRole('heading', { name: 'File Uploaded!', level: 3 })"
@@ -108,9 +131,9 @@ states:
     observed: "URL stays https://the-internet.herokuapp.com/upload. Page title 'The Internet'. #content holds only <div class=\"example\"> containing <h3>Internal Server Error</h3>, <p id=\"upload-error\">No file was chosen. Please choose a file to upload.</p> and <a href=\"/upload\">Back to the File Uploader</a>. Link 'Back to the File Uploader' returns to the initial state (first session). ABSENT on this page: the 'File Uploader' heading (the only text containing 'File Uploader' is the back link), #file-upload (0 input[type=file]), the Upload button (no #file-submit, no button or submit input), any <form>, and #drag-drop-upload."
 
   - name: drag_drop
-    trigger: "Drop a file onto #drag-drop-upload"
-    request: "NOT YET OBSERVED"
-    observed: "NOT YET OBSERVED (only the zone's static appearance was observed; see elements.drag_drop_zone)"
+    trigger: "Dispatch a real drop of sample.txt on #drag-drop-upload: in the page, build File([72 fixture bytes], 'sample.txt', { type: 'text/plain' }), add it to a new DataTransfer, then zone.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer })) for 'dragenter', 'dragover', 'drop' in that order. Dropzone called preventDefault on all three. A second run dispatching 'drop' ALONE (no dragenter/dragover) uploaded identically, so dragenter/dragover are not required. No Upload click, no file chooser, no hidden-input setInputFiles. Playwright equivalent: const dt = await page.evaluateHandle(b64 => { const d = new DataTransfer(); d.items.add(new File([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], 'sample.txt', { type: 'text/plain' })); return d; }, base64OfFixture); await zone.dispatchEvent('drop', { dataTransfer: dt }); (the MCP run used page.evaluate with new DragEvent directly; the evaluateHandle + locator.dispatchEvent form is the standard Playwright equivalent and was not itself run in this session)."
+    request: "Exactly one request to the app: POST https://the-internet.herokuapp.com/upload -> 200, sent by Dropzone as an XMLHttpRequest (Resource Timing initiatorType 'xmlhttprequest'; NOT a navigation: the page kept its single Navigation Timing entry, type 'navigate'). Sent by the drop alone, about 14-15 ms after it. Configured paramName 'file' (the same field name as #file-upload); the request headers and body were not captured, so the multipart Content-Type is NOT YET OBSERVED. Response: content-type 'text/html;charset=utf-8', content-length 1764, and the body is the normal success page (<h3>File Uploaded!</h3>, #uploaded-files textContent \"\\n    sample.txt\\n  \"), which shows the server received a file named sample.txt. Dropzone discards that HTML; it is not rendered."
+    observed: "Dropzone events: addedfile at +2 ms, sending at +14 ms, success and complete at +350 ms (xhr.status 200, file.status 'success', file.accepted true), queuecomplete at +351 ms. Second run (drop only): preview reached 'dz-complete' 256 ms after the drop. In the zone: one .dz-preview, final class 'dz-preview dz-file-preview dz-processing dz-success dz-complete'; [data-dz-name] text exactly 'sample.txt'; '✔' mark (present from the moment of the drop, see elements.dropzone_success_mark); no size, no error message, no 'dz-error' class. Zone class becomes 'dz-success-mark dz-clickable dz-started'. Rest of the page unchanged: URL still https://the-internet.herokuapp.com/upload, h3 list exactly ['File Uploader'], #file-upload files.length 0 and value '' (screenshot still shows native 'No file chosen'), #file-submit present with value 'Upload', #uploaded-files absent, input.dz-hidden-input files.length 0. Console: only the known Optimizely ERR_NAME_NOT_RESOLVED and /favicon.ico 404 errors; nothing from Dropzone."
 
 gotchas:
   - "Two file inputs exist: '#file-upload' (in the form) and a hidden Dropzone 'input.dz-hidden-input' (multiple, outside the form, under <body>). 'input[type=file]' matches both. Always use '#file-upload' for the picker flow."
@@ -120,7 +143,12 @@ gotchas:
   - "On the empty-submit page the only text containing 'File Uploader' is the link 'Back to the File Uploader'. A loose getByText('File Uploader') matches that link, so it would wrongly 'prove' the user is still on the form. Use getByRole('heading', { name: 'File Uploader' }) (absent on the error page) or #file-upload (absent too)."
   - "#uploaded-files textContent includes template whitespace around 'sample.txt'. Use toHaveText('sample.txt'), which normalises whitespace, or trim before an exact comparison. Do not compare raw textContent."
   - "The success page has no link back to the form and no file input. A test that uploads twice must navigate to /upload again."
-  - "The drop zone and the 'No file chosen' / chosen-file-name text do not appear in the accessibility snapshot. Use the DOM (#file-upload files) or screenshots for them."
+  - "The empty drop zone and the 'No file chosen' / chosen-file-name text do not appear in the accessibility snapshot. Use the DOM (#file-upload files) or screenshots for them. After a drop, the zone and its preview do appear, but only as unnamed generics, so role locators still cannot target them."
+  - "The drop path is Dropzone's own XHR, NOT the form. setInputFiles / browser_file_upload on input.dz-hidden-input, or clicking the zone to open a chooser, exercise different code (C-IO-3). Produce a real drop: a DataTransfer carrying a File, dispatched as a 'drop' event on #drag-drop-upload (dragenter/dragover optional; drop alone worked)."
+  - "The drop upload is an XHR, so the page does not navigate. Do not wait for navigation or for 'File Uploaded!'. Register page.waitForResponse(r => r.url().endsWith('/upload') && r.request().method() === 'POST') BEFORE dispatching the drop (the request leaves within ~15 ms), then assert status 200."
+  - "The '✔' mark is static template markup, visible from the instant of the drop, before the server answers. It proves nothing. Assert the preview's 'dz-success' class (it was added ~250-350 ms after the drop)."
+  - "The zone element itself has class 'dz-success-mark', the same class as the ✔ div inside each preview. A bare '.dz-success-mark' locator matches the zone too (2 elements after a drop). Scope it: '#drag-drop-upload .dz-preview .dz-success-mark'."
+  - "The XHR response is the full success HTML page (content-type text/html). Dropzone treats any 2xx as success and ignores the body, so the zone shows no server-supplied text. If a test must prove the server stored the file, inspect the response body for #uploaded-files 'sample.txt'."
   - "Third-party Optimizely beacons (https://298279967.log.optimizely.com/event...) fail with net::ERR_NAME_NOT_RESOLVED on every page load and also on interaction (an 'engagement' beacon fired around choosing the file), plus /favicon.ico -> 404. These are console errors unrelated to the upload. Filter network assertions to the-internet.herokuapp.com/upload, and filter console errors before failing a test on them."
 
 doc_discrepancies:
@@ -129,10 +157,13 @@ doc_discrepancies:
 
 not_yet_observed:
   - "The POST /upload request body and response headers on a successful submit (only method, URL and status were recorded)."
-  - "Drag-and-drop: what happens on drop, whether it sends a request by itself or needs the Upload button, and what it displays."
+  - "Drag-and-drop request headers and body: the multipart Content-Type and the exact form field sent by Dropzone were not captured (only the configured paramName 'file' and the server's success response were seen)."
+  - "Drag-and-drop with a real OS/mouse drag (Playwright dragTo from an external file is not possible; only a synthetic DragEvent with a DataTransfer was used). Also: dropping two files, dropping after a form upload, a drop that the server rejects (dz-error state), and WebKit/Firefox behaviour."
+  - "The exact Playwright evaluateHandle + locator.dispatchEvent('drop', { dataTransfer }) form was not run in this session; the MCP run used page.evaluate with new DragEvent on the zone element."
   - "Behaviour with multiple files, large files, or restricted types: out of scope, and no such fixtures are committed."
   - "A confirmed cold-start load time. First loads of 865 ms and 2823 ms were seen; either may have hit an already-warm dyno."
 
 covered_by:
-  - "tests/upload/upload-form.spec.ts (TC-UPLOAD-001)"
-  - "tests/upload/empty-submit.spec.ts (TC-UPLOAD-002, @known-defect DEFECT-001)"
+  - "tests/upload/TC-UPLOAD-001-upload-form.spec.ts (TC-UPLOAD-001)"
+  - "tests/upload/TC-UPLOAD-002-empty-submit.spec.ts (TC-UPLOAD-002, @known-defect DEFECT-001)"
+  - "tests/upload/TC-UPLOAD-003-drag-drop.spec.ts (TC-UPLOAD-003)"

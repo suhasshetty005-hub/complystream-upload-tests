@@ -20,6 +20,11 @@ Rule ids are stable. Once a rule is removed, its id is never reused.
   test.
 - **C-TC-3** Every step that has an expected result maps to an assertion. If a step is not
   automated, the batch report must say why. Skipping it silently is a blocker.
+- **C-TC-4** One spec file per test case, named `<ID>-<short-slug>.spec.ts` (e.g.
+  `tests/upload/TC-UPLOAD-001-upload-form.spec.ts`), so the file sorts by ID and matches
+  `test-cases/<ID>.md`. When a file is renamed or moved, grep the whole repo for the old path and
+  update every live reference. Dated records (review logs, past self-verify runs, doc-gaps
+  sections) are left as written.
 
 ## Locators
 

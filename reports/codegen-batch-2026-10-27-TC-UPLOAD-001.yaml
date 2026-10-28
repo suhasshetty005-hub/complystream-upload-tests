@@ -1,9 +1,9 @@
 batch_date: 2026-10-27
 test_case: TC-UPLOAD-001
 status: done
-files: [pages/UploadPage.ts, tests/fixtures/index.ts, tests/upload/upload-form.spec.ts]
+files: [pages/UploadPage.ts, tests/fixtures/index.ts, tests/upload/TC-UPLOAD-001-upload-form.spec.ts]   # renamed per C-TC-4 in fix round 4
 knowledge_updated:
-  - "knowledge/pages/upload.yaml: covered_by now lists tests/upload/upload-form.spec.ts (C-KNOW-6)"
+  - "knowledge/pages/upload.yaml: covered_by now lists tests/upload/TC-UPLOAD-001-upload-form.spec.ts (C-KNOW-6)"
   - "knowledge/scenario-map.yaml: TC-UPLOAD-001 status explored -> in_review, files added"
 reused: []   # first run: pages/ and tests/fixtures/index.ts did not exist, both created
 steps_mapped:
@@ -76,6 +76,22 @@ fix_rounds:
       Received: 1'. The finally block ran dispose() on that failure path. Run 3: reverted to toBe(1) and it passed
       (3.2s). Gates: `npm run typecheck` (tsc --noEmit) clean; `npm run knowledge` clean (YAML tabs OK, locator
       traceability C-LOC-4 OK).
+  - round: 4
+    date: 2026-10-28
+    kind: structural_rename   # no review findings applied; no test code changed
+    requested_by: human
+    change: >
+      Renamed tests/upload/upload-form.spec.ts -> tests/upload/TC-UPLOAD-001-upload-form.spec.ts with
+      git mv, per C-TC-4. Contents byte-identical (md5 f2a5ac5b81da9a4e06f7594d835c702b before and after).
+      Live references updated: this report's files and knowledge_updated lines, knowledge/scenario-map.yaml
+      files, knowledge/pages/upload.yaml covered_by, and the example paths in agents/codegen-agent.md:79 and
+      agents/review-agent.md:69. Earlier fix rounds above, review logs and reports/doc-gaps.md are dated
+      records and keep the old name.
+    verification: >
+      npx playwright test --list: 'Total: 3 tests in 3 files', this one as
+      upload\TC-UPLOAD-001-upload-form.spec.ts:4:7; --grep @tc:TC-UPLOAD-001 lists exactly 1 test.
+      npx playwright test --grep "@tc:TC-UPLOAD-001" --retries=0: PASSED (1 passed, 4.1s). No inversion
+      re-run: the test body is byte-identical. npm run typecheck clean; npm run knowledge clean.
 not_generated: []   # every step with an expected result maps to an assertion
 deviations_and_notes:
   - "Step 3: the test case says '2xx' and the knowledge file records 200 (states.successful_submit). 200 is a 2xx, so they do not conflict and nothing goes to Doc-Gap. The test asserts the 2xx range the test case specifies; the observed 200 is kept as a comment. (Corrected in fix-round 2: the earlier 'knowledge wins, assert exactly 200' wording misread C-TC-1, under which the test case alone defines what is tested.)"

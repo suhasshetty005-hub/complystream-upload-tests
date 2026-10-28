@@ -1,0 +1,201 @@
+reviewed: 2026-10-28
+test_case: TC-UPLOAD-003
+batch: reports/codegen-batch-2026-10-28-TC-UPLOAD-003.yaml
+verdict: approved
+
+# Scope: `git diff 73d0ec6` (pages/UploadPage.ts, knowledge/pages/upload.yaml, knowledge/scenario-map.yaml)
+# plus the untracked tests/upload/drag-drop.spec.ts and the batch report, read in full. tests/fixtures/index.ts,
+# upload-form.spec.ts and empty-submit.spec.ts are unchanged.
+#
+# Reviewer's own runs (2026-10-28, local, --retries=0):
+#   npm run typecheck                                    -> clean (tsc --noEmit, no output)
+#   npm run knowledge                                    -> YAML tabs OK; C-LOC-4 traceability OK
+#   npx playwright test --list --grep "@tc:TC-UPLOAD-003" -> exactly 1 test, upload\drag-drop.spec.ts:4:7 (C-TC-2)
+#   npx playwright test --grep "@tc:TC-UPLOAD-003"       -> 1 passed (7.8s)
+#   npx playwright test --grep "@tc:TC-UPLOAD-001"       -> 1 passed (14.7s). No regression from the refactor.
+#   npx playwright test --grep "@tc:TC-UPLOAD-002"       -> 1 FAILED as designed at empty-submit.spec.ts:31:86 with
+#     'Error: POST /upload status 500 must not be 5xx (DEFECT-001) / Expected: < 500 / Received: 500'.
+#     Same failure, same line as the r2 log. On the 500, not a timeout (C-DEFECT-4).
+#
+# Orchestrator's questions
+# 1. C-IO-3 (real drop): MET. dropFile() (UploadPage.ts:107-128) builds a DataTransfer holding a File in the page
+#    (evaluateHandle, :113-118) and calls this.dropZone.dispatchEvent('drop', { dataTransfer }) (:122) on
+#    #drag-drop-upload. Playwright's dispatchEvent creates a bubbling, cancelable DragEvent, so Dropzone's own
+#    drop handler runs. Repo-wide grep: no setInputFiles, no use of input.dz-hidden-input (only a doc-comment
+#    mention at :102), no click on the zone, and dropzone_hidden_input is deliberately not in the page object.
+#    The passing run shows Dropzone processed it ('dz-success' on the preview, name filled by Dropzone).
+#    Knowledge records that 'drop' alone was enough (states.drag_drop trigger), so omitting dragenter/dragover
+#    is traced, not guessed.
+# 2. C-IO-1: MET. The bytes come from fs.readFileSync(filePath) at call time (:111), with filePath =
+#    files.sampleTxt = tests/fixtures/files/sample.txt (committed, 72 bytes, git ls-files confirms). The name is
+#    path.basename(filePath). Nothing is hard-coded in code: the base64 string in knowledge/pages/upload.yaml:20
+#    is an observation record in a comment and is not used by any code. The MIME default 'text/plain' matches the
+#    Explorer's drop. node:fs is a Node built-in covered by @types/node, so C-AGENT-10 holds.
+# 3. submit() refactor: behaviour UNCHANGED. The predicate in waitForUploadPost() (:134-138) is character-for-character
+#    the old inline one (POST + pathname '/upload'). submit() still evaluates waitForUploadPost() before
+#    uploadButton.click() inside Promise.all, so the wait is still armed first (C-IO-2). Reviewer runs: TC-001 passes,
+#    TC-002 fails on the 500 at the same line. Carried r3/r4 suggestion (C-POM-4, pathname-only predicate vs the
+#    exact-URL counter at :151) is NOT re-raised. Note for the human: the drift now also covers dropFile(), because it
+#    shares the same predicate. One shared private helper is the right shape for the eventual fix: it is now a one-line change.
+# 4. Step-1 bounding box (spec:15-21): sound and reasonably robust, with a soft knowledge trace. It runs after both
+#    elements are asserted visible, compares top edge against bottom edge (no pixel constants, so it is
+#    viewport-independent), and null boxes fail with a message. Knowledge records the zone's y=358 and "below the
+#    Upload button" / "An empty red-dashed drop zone below" (elements.drag_drop_zone, states.initial), but NOT the
+#    file input's geometry, so "Upload button is below the file input" in the spec comment (:14) is inferred.
+#    It is a single snapshot (C-WAIT-2 says "prefer"), taken on a static layout. See suggestion 3 and conventions_silent_on.
+# 5. Step 3 dz-success: SOUND. Knowledge observed that 'dz-success' is added about 250-350 ms after the drop, together with
+#    Dropzone's success event (xhr.status 200), and that the ✔ is static template markup present before the server
+#    answers (elements.dropzone_success_mark, states.drag_drop, gotchas). Using the class rather than the ✔ is correct.
+#    toHaveClass is web-first, so it also waits out the 250-350 ms. Weakness: the regex /\bdz-success\b/ also matches the
+#    token 'dz-success-mark', a class this very page uses. See suggestion 1. The user-visible gap (nothing a user
+#    sees distinguishes accepted from pending) was correctly routed to Doc-Gap (test_case_disagreements[1]).
+# 6. Self-verify vs C-AGENT-4: MEETS THE RULE, so this is not a blocker. Pass -> step-3 file name inverted to 'wrong.txt' -> failed at
+#    drag-drop.spec.ts:45:53 with the real toHaveText message (Expected "wrong.txt", Received "sample.txt") ->
+#    restored (cmp IDENTICAL) -> pass, plus TC-001/002 regression runs. The file name is a core outcome (step 3
+#    expected result), and C-AGENT-4 asks for ONE inverted core assertion. Codegen states honestly what was NOT
+#    proven (not_proven_by_runs) and labels its one inference. It is not enough to prove the test's central claim,
+#    though. Nothing shows that the test goes red if the file arrives by the form path instead of the drop (the
+#    isNavigationRequest check at :36 and the count at :60 were never seen to fail). Inverting :36 to toBe(true) would
+#    only re-show the observed value. A path mutation is what would prove it. See suggestion 2. This is the per-assertion
+#    falsifiability gap already escalated in the TC-UPLOAD-002 r1 log (conventions_silent_on[1]), now in a non-defect test.
+# 7. C-ASSERT-1: met. Step 1 heading toHaveText (:10), step 3 name toHaveText exact (:45, knowledge: no surrounding
+#    whitespace), step 4 heading toHaveText (:50), fileInput toHaveValue('') (:52), uploadButton toHaveValue('Upload')
+#    (:54, the exact form the earlier logs suggested for <input type=submit>). The two toBeVisible calls (:11, :12) are on
+#    id locators with no name, as preconditions for the box check, so no named-locator pattern appears.
+#    C-ASSERT-2: met. The absences at :56-57 (resultHeading, uploadedFiles hidden) follow the presences at :50-54 on the
+#    same document. The loose-name resultHeading is the stricter direction for an absence (as settled in TC-002 r1).
+#    C-ASSERT-5: met in substance. The counter starts before the drop (:26), filters on exact method + URL (UploadPage.ts:151),
+#    and is read after step 3's web-first wait for dz-success and step 4's checks, so a form POST fired late by the
+#    drop would show as 2 (:60). No negative waitForRequest. The rule's literal shape ("0, then a running total after a
+#    later action") does not fit a test whose action is itself the one request; Codegen escalated this and it is carried below.
+#    C-POM-5: met. dispose() is in finally (:62-64), and only one mechanism is used (the returned disposer). dropFile() also
+#    disposes its JSHandle in finally (:125-127).
+#    C-ASSERT-4: status (2xx range = the test case's wording, :33-34) plus the zone state, both asserted.
+#
+# Other Checklist A items: A2 coverage: all four steps are asserted (C-TC-3); see suggestion 4 for step 4's "not reset" half.
+#   A3: every locator, the class name, the exact 'sample.txt', '' and 'Upload' values, and non-navigation trace to
+#   upload.yaml. A5: no raw locators in the spec (C-LOC-5), no sleeps (C-WAIT-1), steps wrapped (C-ASSERT-3), fixture
+#   used (C-POM-2), locators readonly and no expect in the page object (C-POM-3), intent-named dropFile() (C-POM-1),
+#   C-LOC-2/3 fallbacks commented (UploadPage.ts:39-56). A7: n/a.
+#
+# Checklist B (knowledge/pages/upload.yaml, scenario-map.yaml)
+#   B1: the three new elements each have a `why` with the C-LOC-3 justification (C-KNOW-3).
+#   B2: states.drag_drop was exercised twice on fresh loads (with and without dragenter/dragover), with event timings,
+#       class sequences, Resource/Navigation Timing evidence, and the hidden input checked after the drop.
+#   B3: not_yet_observed was updated honestly: the drag-drop entry was replaced with the specific open items (headers/body,
+#       real OS drag, multi-file, dz-error, other browsers, the untried Playwright form). See suggestion 5 for one stale line.
+#   B4: claims trace to observations. The "Playwright equivalent" in states.drag_drop is labelled as not run.
+#       The ✔-is-static claim is backed by an observed timing (display:block before dz-success).
+#   B5: covered_by += drag-drop.spec.ts (C-KNOW-6); last_observed 2026-10-28 (C-KNOW-7); first_load_ms 5606 with its
+#       caveat. scenario-map TC-UPLOAD-003 is `in_review` with the right files (settled: the orchestrator sets `done`).
+
+findings:
+  - severity: suggestion
+    file: tests/upload/drag-drop.spec.ts
+    line: 43
+    convention_ref: "C-ASSERT-1 (assert the whole value: here the whole class token); Checklist A6"
+    issue: >
+      toHaveClass(/\bdz-success\b/) is not a whole-token match. '\b' treats '-' as a boundary, so the regex also
+      matches 'dz-success-mark', a class this page puts on the zone itself and on the ✔ div (knowledge gotchas,
+      elements.dropzone_success_mark). Today the preview element never carries 'dz-success-mark', so the test is
+      correct now. The pattern is wrong for the purpose, and it was copied from the knowledge note
+      (elements.dropzone_preview).
+    why_it_matters: >
+      If the preview template ever gains a 'dz-success-mark' class on the .dz-preview element (the class is
+      already used twice on this page), step 3 would pass before the server answers. That is exactly the false
+      acceptance signal the test avoids by not using the ✔.
+    fix: >
+      await expect(uploadPage.dropzonePreview).toContainClass('dz-success');  (Playwright 1.64.1 is installed, and
+      toContainClass matches whole class tokens). Alternatively, use toHaveClass(/(^|\s)dz-success(\s|$)/). The
+      Explorer should correct the same regex in knowledge elements.dropzone_preview notes.
+
+  - severity: suggestion
+    file: reports/codegen-batch-2026-10-28-TC-UPLOAD-003.yaml
+    line: 81
+    convention_ref: "C-AGENT-4 (met as written); per-assertion falsifiability is a rubric gap, see conventions_silent_on[0]"
+    issue: >
+      The one inversion (file name, step 3) proves that the step-3 check bites. It says nothing about step 2, which is
+      the test's reason to exist: the upload happens through the drop, without the form or the Upload button. The
+      checks that guard that claim, isNavigationRequest() false (spec:36) and the total count of 1 (spec:60),
+      were only ever seen to pass. Inverting spec:36 to toBe(true) would add little, because it only re-shows the
+      observed value.
+    why_it_matters: >
+      If a later edit made dropFile() fall back to chooseFile()+submit(), the zone checks in step 3 would fail first, so
+      the test would still go red. But nothing on record shows that the step-2 guards alone distinguish the two paths.
+      For a test whose case notes say "this is the mistake I expect the AI to make", that is the property most worth
+      demonstrating.
+    fix: >
+      In the next self-verify of this test, add one temporary mutation run (do not commit it): in step 2, replace
+      `uploadPage.dropFile(files.sampleTxt)` with `(await uploadPage.chooseFile(files.sampleTxt), await uploadPage.submit())`.
+      Expect a failure at spec:36 ('the drop upload must not be a page navigation', Expected false, Received true).
+      Record it as run_2b with the message. No spec change is needed.
+
+  - severity: suggestion
+    file: tests/upload/drag-drop.spec.ts
+    line: 14
+    convention_ref: "C-LOC-4 / Checklist A3 (trace to knowledge); C-WAIT-2 (prefer web-first)"
+    issue: >
+      The comment says knowledge records "the zone sits below the Upload button, which is below the file input". Knowledge
+      records the zone's box (y=358, 400x400) and "below the Upload button", but no geometry for #file-upload. The
+      file-input half is inferred. The check itself is a one-off boundingBox() read, not a retrying assertion.
+    why_it_matters: >
+      The assertion is correct today (the reviewer's run passed). But the test asserts a geometric fact that no
+      observation backs directly, and a single snapshot could in principle be taken mid-layout (e.g. a late web
+      font or banner shifting the form).
+    fix: >
+      Explorer: on the next session, record #file-upload's bounding box next to the zone's in elements.file_input /
+      states.initial. Codegen: change the comment to cite only what is recorded. Optionally make the check retrying with
+      `await expect.poll(async () => { const c = await uploadPage.fileInput.boundingBox(); const z = await uploadPage.dropZone.boundingBox(); return !!c && !!z && z.y >= c.y + c.height; }, { message: 'drop zone below the file chooser' }).toBe(true);`
+
+  - severity: suggestion
+    file: tests/upload/drag-drop.spec.ts
+    line: 52
+    convention_ref: "C-TC-3 / C-AGENT-5 (record what is not covered); route to Doc-Gap (C-TC-1)"
+    issue: >
+      Step 4's expected result is "the drop did not also submit or reset it". The "not submitted" half is well covered
+      (count 1, no navigation, result page absent). The "not reset" half is vacuous: no file was chosen in the form, so
+      toHaveValue('') is also the value after a reset. The batch report maps step 4 as covered and does not say that
+      a reset cannot be detected here.
+    why_it_matters: >
+      A regression where a drop clears the form's chosen file would pass this test. Readers of the batch report would
+      believe it is covered.
+    fix: >
+      Do not add a choose-file step on Codegen's initiative (the test case defines the steps, C-TC-1). Add a line to the
+      batch report's not_generated: "'not reset' is not observable with an empty form; detecting it needs a file chosen
+      before the drop". Add the same item to test_case_disagreements for Doc-Gap, so the product owner can decide whether
+      the test case should choose a file first. The Explorer would then need to observe "choose, then drop", which
+      not_yet_observed does not yet list.
+
+  - severity: suggestion
+    file: knowledge/pages/upload.yaml
+    line: 164
+    convention_ref: C-KNOW-7 / C-KNOW-2
+    issue: >
+      not_yet_observed still says "First loads of 865 ms and 2823 ms were seen". first_load_ms (:20) now records 5606 ms
+      from the fourth session. Separately, the entry at :160 ("the exact Playwright evaluateHandle + locator.dispatchEvent
+      form was not run") is now answered by Codegen's run_1_pass and by the reviewer's run. Only the Explorer may record
+      that as an observation.
+    why_it_matters: "The knowledge file contradicts itself on the load-time evidence, and keeps one open item that has since been exercised."
+    fix: >
+      Explorer (not Codegen or the reviewer): update :164 to "First loads of 865, 2823 and 5606 ms were seen...". On the
+      next session, re-observe the evaluateHandle + dispatchEvent form and close :160, or annotate it as "exercised by
+      tests/upload/drag-drop.spec.ts (Codegen run 2026-10-28), not yet Explorer-observed".
+
+conventions_silent_on:
+  - "Per-assertion falsifiability (carried from TC-UPLOAD-002 r1, now in a non-defect test): C-AGENT-4 requires one inverted core assertion. It does not say that the inversion must target the assertion that guards the test's distinguishing claim (here, the drop path rather than the form), or that a path mutation (swap the action, expect red) is the right proof for C-IO-3 tests. A human should decide whether to add 'for an input-path test, self-verify must include one run with the wrong path'."
+  - "C-ASSERT-5 is written for proving that an action sent NO request (0, then a running total after a later known request). It does not cover 'exactly one request, and no second one' when the action under test is itself the request (step 4 here). The test reads the total after the following web-first waits, which closes the late-request window reasonably. Raised by Codegen; no rule says how long after the action the total must be read."
+  - "Asserting layout or relative position (step 1, 'below the file chooser') with boundingBox(). C-LOC-3 forbids LOCATING by position, but no rule covers ASSERTING position, or whether such a check must be retrying (C-WAIT-2 only says 'prefer'). Raised by Codegen."
+  - "Whether a page-object action may read fixture bytes from disk itself (fs.readFileSync in dropFile) rather than the fixture module supplying them. C-IO-1 is satisfied either way. Raised by Codegen."
+  - "Whether a test may assert a non-user-visible signal (the 'dz-success' class) for an expected result worded in user terms ('the zone shows that the file was accepted'), when the knowledge file shows the only visible cue (✔) is not trustworthy. C-ASSERT-4 covers server vs page, not DOM-state vs perceivable state. Routed to Doc-Gap by Codegen; the reviewer agrees the class is the sound choice."
+  - "Carried, still open: definition of 'core outcome' in C-ASSERT-1; app origin under configurable BASE_URL; batch-report vs scenario-map `status` naming; `exact: true` on fixed-name locators; the purpose of first_load_ms; multi-outcome known-defect tests; stub status/body choice; CI retries for @known-defect."
+
+meta_signal: >
+  C-ASSERT-1 appears in this log only as suggestion 1 (a regex that is not whole-token), not as the earlier
+  toBeVisible-on-a-named-locator pattern. This batch uses toHaveText / toHaveValue throughout, including
+  toHaveValue('Upload') for the <input type=submit>. That is the first batch without the pattern, even though
+  agents/codegen-agent.md:47 is still unchanged. The TC-UPLOAD-002 log's recommended prompt change has not been made, and
+  the improvement may simply come from Codegen reading the earlier logs, which is fragile. Make the change. C-ASSERT-1 is
+  now in 4 review logs (more than two, C-AGENT-9). Second signal: per-assertion falsifiability (conventions_silent_on[0])
+  is now raised in 2 reviews (TC-UPLOAD-002 r1 and this one). One more and it crosses the threshold. Because the test
+  case explicitly names the wrong-path mistake as the expected AI failure, this is the batch type where a
+  path-mutation self-verify is most valuable.

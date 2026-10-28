@@ -58,7 +58,7 @@ would expect Y: here is the defect, with the evidence"*.
 - **The page does:** POST /upload → 500, body "Internal Server Error".
 - **Which side is wrong:** the app. A user error should never surface as a 500.
 - **Evidence:** knowledge/pages/upload.yaml :: states.submit_without_file
-- **Covered by:** tests/upload/upload-form.spec.ts — @known-defect, fails by design.
+- **Covered by:** tests/upload/TC-UPLOAD-002-empty-submit.spec.ts — @known-defect, fails by design.
 
 ### Unverifiable: file is persisted
 - **Needs:** read access to upload storage, or a GET endpoint listing uploaded files.

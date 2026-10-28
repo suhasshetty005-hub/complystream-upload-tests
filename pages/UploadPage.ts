@@ -1,7 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 
 /**
- * The /upload screen and the result page it posts back to (same URL).
+ * The /upload screen (file-chooser form and drag-and-drop zone) and the result page the form
+ * posts back to (same URL).
  * Every locator traces to knowledge/pages/upload.yaml (C-LOC-4).
  */
 export class UploadPage {
@@ -33,6 +36,24 @@ export class UploadPage {
    * it has a stable id. knowledge: elements.empty_submit_message
    */
   readonly emptySubmitMessage: Locator;
+  /**
+   * The Dropzone.js drag-and-drop zone below the form. C-LOC-2 fallback: it is absent from the
+   * accessibility tree (no role, name or tabindex), so only its stable id can target it.
+   * knowledge: elements.drag_drop_zone
+   */
+  readonly dropZone: Locator;
+  /**
+   * The preview Dropzone adds inside the zone for a dropped file. C-LOC-3: an unnamed generic with
+   * no id, so Dropzone's own '.dz-preview' template class is used, scoped to the zone id. Its
+   * 'dz-success' class is the acceptance signal (the ✔ mark is static markup and proves nothing).
+   * knowledge: elements.dropzone_preview, gotchas
+   */
+  readonly dropzonePreview: Locator;
+  /**
+   * The dropped file's name in the preview. C-LOC-3: an unnamed generic with no id; [data-dz-name]
+   * is the attribute Dropzone fills with the name, scoped to the zone. knowledge: elements.dropzone_file_name
+   */
+  readonly dropzoneFileName: Locator;
 
   constructor(private readonly page: Page) {
     this.heading = page.getByRole('heading', { name: 'File Uploader', level: 3 });
@@ -42,6 +63,9 @@ export class UploadPage {
     this.uploadedFiles = page.locator('#uploaded-files');
     this.emptySubmitErrorHeading = page.getByRole('heading', { name: 'Internal Server Error', level: 3 });
     this.emptySubmitMessage = page.locator('#upload-error');
+    this.dropZone = page.locator('#drag-drop-upload');
+    this.dropzonePreview = page.locator('#drag-drop-upload .dz-preview');
+    this.dropzoneFileName = page.locator('#drag-drop-upload [data-dz-name]');
   }
 
   async goto(): Promise<void> {
@@ -68,13 +92,49 @@ export class UploadPage {
    * /upload POST, ignoring third-party beacons (knowledge: gotchas).
    */
   async submit(): Promise<Response> {
-    const [response] = await Promise.all([
-      this.page.waitForResponse(
-        (r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/upload',
-      ),
-      this.uploadButton.click(),
-    ]);
+    const [response] = await Promise.all([this.waitForUploadPost(), this.uploadButton.click()]);
     return response;
+  }
+
+  /**
+   * Drop a file onto the drag-and-drop zone with a real 'drop' event carrying a DataTransfer
+   * (C-IO-3; knowledge: states.drag_drop, gotchas). This is Dropzone's own XHR path, not the form:
+   * it never touches #file-upload or input.dz-hidden-input and never clicks the zone.
+   * The file's bytes are read from the given committed fixture at call time (C-IO-1) and rebuilt
+   * as a File in the page. A 'drop' alone was observed to be enough (no dragenter/dragover).
+   * The POST /upload response wait is armed before the drop (C-IO-2) and is returned.
+   */
+  async dropFile(filePath: string, mimeType = 'text/plain'): Promise<Response> {
+    const file = {
+      name: path.basename(filePath),
+      type: mimeType,
+      base64: fs.readFileSync(filePath).toString('base64'),
+    };
+    const dataTransfer = await this.page.evaluateHandle(({ name, type, base64 }) => {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const dt = new DataTransfer();
+      dt.items.add(new File([bytes], name, { type }));
+      return dt;
+    }, file);
+    try {
+      const [response] = await Promise.all([
+        this.waitForUploadPost(),
+        this.dropZone.dispatchEvent('drop', { dataTransfer }),
+      ]);
+      return response;
+    } finally {
+      await dataTransfer.dispose();
+    }
+  }
+
+  /**
+   * Wait for the app's own POST /upload response, ignoring third-party beacons (knowledge:
+   * gotchas). Shared by the form submit and the drop, which post to the same URL.
+   */
+  private waitForUploadPost(): Promise<Response> {
+    return this.page.waitForResponse(
+      (r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/upload',
+    );
   }
 
   /**

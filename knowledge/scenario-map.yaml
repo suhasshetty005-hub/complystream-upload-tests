@@ -18,7 +18,7 @@ scenarios:
     files:
       - pages/UploadPage.ts
       - tests/fixtures/index.ts
-      - tests/upload/upload-form.spec.ts
+      - tests/upload/TC-UPLOAD-001-upload-form.spec.ts
 
   - id: TC-UPLOAD-002
     title: Submitting with no file selected shows a validation message
@@ -27,4 +27,12 @@ scenarios:
     # @known-defect DEFECT-001: the test fails red against the live app by design (C-DEFECT-1)
     files:
       - pages/UploadPage.ts
-      - tests/upload/empty-submit.spec.ts
+      - tests/upload/TC-UPLOAD-002-empty-submit.spec.ts
+
+  - id: TC-UPLOAD-003
+    title: Drop a file onto the drag-and-drop zone
+    page: pages/upload
+    status: done
+    files:
+      - pages/UploadPage.ts
+      - tests/upload/TC-UPLOAD-003-drag-drop.spec.ts

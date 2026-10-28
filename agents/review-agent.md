@@ -66,7 +66,7 @@ verdict: approved | changes_requested
 
 findings:
   - severity: blocker | suggestion
-    file: tests/upload/upload-form.spec.ts
+    file: tests/upload/TC-UPLOAD-001-upload-form.spec.ts
     line: 18
     convention_ref: C-ASSERT-1
     issue: "toContainText('Uploaded') where knowledge records the exact heading 'File Uploaded!'"

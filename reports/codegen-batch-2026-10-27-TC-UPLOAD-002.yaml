@@ -6,10 +6,10 @@ history:
   - "Run 2 (2026-10-27): unblocked. The Explorer recorded elements.empty_submit_message, elements.empty_submit_error_heading, the absences in states.empty_submit, a second 500 observation and the back-link gotcha. All three missing facts are now covered."
 files:
   - pages/UploadPage.ts               # 2 readonly locators added; submit() doc comment widened
-  - tests/upload/empty-submit.spec.ts  # TC-UPLOAD-002 test; moved here from upload-form.spec.ts in fix round 1 (human decision)
+  - tests/upload/TC-UPLOAD-002-empty-submit.spec.ts  # TC-UPLOAD-002 test; given its own file in fix round 1 (human decision), renamed per C-TC-4 in fix round 2
 knowledge_updated:
   - "knowledge/scenario-map.yaml: TC-UPLOAD-002 status explored -> in_review, files added, comment naming DEFECT-001"
-  - "knowledge/pages/upload.yaml: covered_by += 'tests/upload/upload-form.spec.ts (TC-UPLOAD-002, @known-defect DEFECT-001)'"
+  - "knowledge/pages/upload.yaml: covered_by += 'tests/upload/TC-UPLOAD-002-empty-submit.spec.ts (TC-UPLOAD-002, @known-defect DEFECT-001)'"
 reused:
   - "pages/UploadPage.ts: goto(), heading, uploadButton, submit() (the empty submit is the same click as the normal submit, so no submitEmpty() was added; C-POM-4)"
   - "tests/fixtures/index.ts: uploadPage fixture, unchanged"
@@ -153,3 +153,23 @@ fix_rounds:
       stub_rerun: "not repeated; the test body is byte-identical to the one that passed run_B_stub"
       typecheck: "npm run typecheck (tsc --noEmit): exit 0, no output"
       knowledge: "npm run knowledge: YAML tabs OK; locator traceability (C-LOC-4) OK; exit 0"
+  - round: 2
+    date: 2026-10-28
+    kind: structural_rename   # no review findings applied; no test code changed
+    requested_by: human
+    change: >
+      Renamed tests/upload/empty-submit.spec.ts -> tests/upload/TC-UPLOAD-002-empty-submit.spec.ts with
+      git mv, per C-TC-4. Contents byte-identical (md5 6935809547f972d44e5537056158257d before and after).
+      Live references updated: this report's files and knowledge_updated lines (knowledge_updated[1] also
+      corrects the stale upload-form.spec.ts path flagged in review-log 2026-10-27-TC-UPLOAD-002-r2),
+      knowledge/scenario-map.yaml files, knowledge/pages/upload.yaml covered_by, and the example
+      "Covered by" path in agents/doc-gap-agent.md:61 (it describes DEFECT-001). self_verify, fix round 1,
+      review logs and reports/doc-gaps.md are dated records and keep the old names.
+    verification: >
+      npx playwright test --list: 'Total: 3 tests in 3 files', this one as
+      upload\TC-UPLOAD-002-empty-submit.spec.ts:4:7; --grep @tc:TC-UPLOAD-002 lists exactly 1 test.
+      npx playwright test --grep "@tc:TC-UPLOAD-002" --retries=0: FAILED as designed (1 failed) in step
+      "3. The response is not a server error" at TC-UPLOAD-002-empty-submit.spec.ts:31:86 with
+      'Error: POST /upload status 500 must not be 5xx (DEFECT-001) / expect(received).toBeLessThan(expected)
+      / Expected: < 500 / Received: 500'. Stub run not repeated: the test body is byte-identical.
+      npm run typecheck clean; npm run knowledge clean.

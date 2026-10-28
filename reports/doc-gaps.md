@@ -295,3 +295,54 @@ already name the new file.
 
 Not changed: "review-log :54-57" in the step-2 finding cites the review log, not the spec file.
 "review-log round 1, line 22/28" in the TC-UPLOAD-001 section cites the TC-UPLOAD-001 review log.
+
+## 2026-10-28 — TC-UPLOAD-003 · pages/upload
+
+Sources: test-cases/TC-UPLOAD-003.md; knowledge/pages/upload.yaml (last_observed 2026-10-28, fourth
+session); reports/codegen-batch-2026-10-28-TC-UPLOAD-003.yaml; reports/review-log/2026-10-28-TC-UPLOAD-003.yaml
+(approved, 5 suggestions). Test status: passes. No new DEFECT id: nothing below shows the app is wrong.
+
+**Decisions needed**
+1. **Step 3:** what counts as "the zone shows the file was accepted" for a user? Either reword it to the DOM signal the test checks, or ask the product owner for a visible accepted-vs-pending cue (finding A).
+2. **Step 4:** add the precondition "sample.txt chosen in the form before the drop" so that "did not reset" can be tested, or delete "or reset" (finding B).
+3. **Sign off** the rewrite of the stale Notes (finding C).
+4. **Accept** that a real OS drag from the desktop is not covered by the automated test and needs a manual check (finding D).
+
+### A · Unverifiable scenario: step 3 "the zone shows that the file was accepted"
+- **Test case says:** the zone shows the file was accepted and displays `sample.txt`.
+- **The page does:** the name (`[data-dz-name]` = "sample.txt") is filled at once on drop, "before the request completes". The only visible acceptance cue, the ✔, is "static template markup, present and display:block immediately after the drop event, before the XHR completed". Evidence: elements.dropzone_file_name notes; elements.dropzone_success_mark notes; gotchas[10]. The only signal tied to the server's answer is the `dz-success` class, added about 250-350 ms after the drop (elements.dropzone_preview; states.drag_drop observed). A user cannot see a class.
+- **The server's confirmation is not visible either:** the XHR response is the full success page (`<h3>File Uploaded!</h3>`, `#uploaded-files` "sample.txt"), and "Dropzone discards that HTML; it is not rendered" (states.drag_drop request; gotchas[12]). So the user sees nothing on the drop path that comes from the server. The form path does show a server-supplied "File Uploaded!" (states.successful_submit).
+- **Verdict:** the name half can be checked. The "accepted" half cannot be checked from the user's view. The test's `dz-success` check is a sound substitute (review log Q5), but it proves something the step does not say.
+- **Possible product issue, not a DEFECT:** a ✔ that is shown before the server answers would be misleading if it also stays on a failed upload. That case has not been observed (no `dz-error` was ever seen; "a drop that the server rejects (dz-error state)" is in not_yet_observed[2]). Severity could be medium, but certainty is low, so this is **worth re-testing** and is not asserted here.
+- **Needs:** (1) a product decision on what a user should see when the upload is accepted, still pending, or rejected; (2) an Explorer observation of a rejected drop, for example by stubbing POST /upload to return 4xx/5xx, to see whether the ✔ stays.
+- **Proposed wording until then:** "The zone lists `sample.txt`, and Dropzone marks the file as uploaded (preview has the `dz-success` class). Note: no visible cue distinguishes uploaded from pending."
+
+### B · Unverifiable scenario: step 4 "the drop did not … reset it"
+- **Test case says:** the file-chooser form is unchanged; the drop did not submit or reset it.
+- **The page does:** after the drop, `#file-upload` files.length is 0 and its value is '' (states.drag_drop observed). It was already empty before the drop (states.initial). An empty input is what both "unchanged" and "reset" look like, so this half cannot fail. A regression where a drop clears a chosen file would still pass (review-log suggestion 4).
+- **The "did not submit" half can be checked and is covered:** there is one POST, the XHR is not a navigation, and "File Uploaded!" and `#uploaded-files` are absent (states.drag_drop request and observed).
+- **Proposed fix:** add a precondition, "`sample.txt` is chosen in the file chooser (not uploaded)", and change the expected result to "`#file-upload` still holds `sample.txt` (files.length 1) and no form POST was sent". The fixture can be reused, because files.length 1 vs 0 tells the cases apart.
+- **Needs:** an Explorer observation of "choose, then drop". This is not in not_yet_observed: the nearest entry is "dropping after a form upload", which is a different sequence. Add it there. Alternatively, delete "or reset" if the product owner does not care.
+
+### C · Stale: TC-UPLOAD-003 Notes
+- **Test case says (Notes, bullet 2):** the immediate upload "has not been seen happen"; what the zone shows afterwards is "NOT YET OBSERVED"; "The Explorer must record both before Codegen runs."
+- **Now recorded (2026-10-28, 2 drops on fresh loads):** a drop alone sends exactly one XHR POST /upload -> 200, about 14-15 ms after the drop. The zone shows one `.dz-preview` with name "sample.txt" and a ✔, and reaches `dz-success dz-complete` (states.drag_drop).
+- **Also partly stale (Notes, bullet 3):** "does not appear in the accessibility tree at all". This is true only before a drop. Afterwards the zone appears as an unnamed generic containing 'sample.txt' and '✔' (elements.drag_drop_zone notes; gotchas[7]). The conclusion (it cannot be located by role) still holds.
+- **Proposed wording:** "Observed 2026-10-28: a drop uploads immediately (one XHR POST /upload -> 200, no navigation), and the zone then lists the file name with a ✔. See knowledge/pages/upload.yaml :: states.drag_drop. The zone has no role or name, before or after a drop."
+
+### D · Unverifiable scenario: a user dragging a file from the desktop
+- **Test case says (step 2):** "a real `drop` event carrying the file".
+- **What was exercised:** a synthetic `DragEvent` with a page-built `DataTransfer` (states.drag_drop trigger; batch run_1_pass). This meets the step's wording and goes through Dropzone's own handler (review log Q1). It does not cover the browser's handling of an OS drag from a file manager. That is listed in not_yet_observed[2] as "Playwright dragTo from an external file is not possible".
+- **Needs:** nothing from the app. It needs a one-off manual check, or OS-level automation outside Playwright. Record it in TC-UPLOAD-003 Notes as "automated: synthetic drop only".
+- **Cross-browser:** this is covered by the TC-003 Notes and by TC-UPLOAD-009 step 1. It is not a TC-003 gap, so it is not repeated here.
+
+### E · Missing coverage (configuration only, not observed): clicking the zone opens a second chooser
+- **The page has:** `clickable true` and class `dz-clickable`, plus a hidden `input.dz-hidden-input` with `multiple`, outside the form (elements.drag_drop_zone notes; elements.dropzone_hidden_input). This suggests that clicking the zone opens a multi-file chooser that uploads through Dropzone. It is an inference from the configuration. Nobody has clicked the zone.
+- **No test case covers it.** TC-UPLOAD-010 step 1 ("select two files at once") reads as the form chooser only. Low priority. If kept, it belongs in TC-UPLOAD-010 once single- vs multi-file intent is decided.
+
+### Candidates reviewed and rejected (not TC-003 gaps)
+- **Step 1 "below the file chooser" is a layout claim: rejected.** The page agrees: "An empty red-dashed drop zone below" (states.initial) and "below the Upload button", y=358 (elements.drag_drop_zone). The test asserts it, and the test passes. The gap is the missing `#file-upload` geometry in knowledge (review-log suggestion 3, an Explorer task). Optional: drop the layout clause, since it is not functional behaviour.
+- **256 MB limit, multiple files on the drop path, no accept/acceptedFiles: rejected for TC-003.** The 72-byte single text file used here meets none of these limits (`maxFilesize 256`, `acceptedFiles null`, `uploadMultiple false`, `maxFiles null`, elements.drag_drop_zone notes). Each one is already recorded in the case it belongs to: TC-UPLOAD-006 (size), TC-UPLOAD-005 (type), TC-UPLOAD-010 (multiple). They are still blocked on the spec values listed in the TC-UPLOAD-001 section above.
+- **The drop's success response is not rendered: merged into A** (user-visible side). For whether the file was stored, see the existing "file is persisted" finding in the TC-UPLOAD-001 section. The drop response does echo `sample.txt` (states.drag_drop request), so the drop path can reach the same "200 + name echoed" level as the form path. The test checks only the 2xx, which is all step 2 asks for (batch not_generated[0]). Optional: add "the response echoes sample.txt" to step 2.
+- **Cross-browser (Chromium only): rejected.** It is already in the TC-003 Notes and in TC-UPLOAD-009 (see D).
+- **`/\bdz-success\b/` also matches `dz-success-mark`: not a doc gap.** It is a test and knowledge wording fix (review-log suggestion 1).
