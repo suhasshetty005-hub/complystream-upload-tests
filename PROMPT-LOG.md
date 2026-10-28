@@ -21,7 +21,7 @@ weak prompt log. I agreed, and decided to build in small, deliberate steps.
 ### Prompt 2
 > I would like this to be built like [my existing four-agent framework] where we have 4 agents,
 > so basically need to have the same thing: whenever a new test case is written the agents should
-> automate the whole thing. What do you think?
+> automate the whole thing. 
 
 **Decision:** reuse the architecture I had already built for a previous project: Explorer
 (the only agent with a browser) → Codegen (no browser) → Reviewer (rubric, not a persona) →
@@ -48,27 +48,11 @@ orchestrator, the conventions rubric and the knowledge template.
   the hidden input tests a different code path. (This is a mistake AI tools commonly make here.)
 - `C-IO-1`: only committed, harmless fixtures are uploaded, because this is a public server.
 
-### Prompts 4–6: checking the port
-> Are they general, that can be used for any project? Have you checked whether there is any
-> *[previous project]* data in it? Or do we need to write specific agent data based on the project URL?
-
-> Should I do that split now, or leave it? What do you suggest? / What exactly do we mean by
-> "leave the split for later"?
-
-**What I checked:** I had it **grep the new repo** for every client-specific term (product
-name, env-var prefix, ticket keys, tenant host, internal widget names) instead of taking its
-word. All hits were false positives (e.g. `om-` inside `C-POM-1`).
-**Decision:** the *workflow* is generic, but about 20% of the text is specific to this page (base
-URL, states to exercise, file names). Moving that into a single `docs/project-profile.md` would
-make the agents reusable on any app. **I deferred it**: it isn't one of the brief's deliverables,
-the 4-hour cap is tight, and refactoring agents before they have run once mixes refactor bugs
-with real ones. It is listed as a next step.
-
 ---
 
 ## Phase 2: Test cases
 
-### Prompt 7
+### Prompt 4
 > Want me to draft the test cases now? Yes.
 
 **What it did:** drafted `test-cases/TC-UPLOAD-001..010.md` as a **specification** (what the
@@ -79,7 +63,7 @@ The other seven each state why they can't be automated and what I'd need from Co
 returns a server error") is explicitly marked *not confirmed*. The Explorer must observe it
 before any test relies on it.
 
-### Prompt 8: catching that the test cases were written blind
+### Prompt 5: catching that the test cases were written blind
 > Did you navigate to https://the-internet.herokuapp.com/upload in order to understand it better
 > and write the test cases?
 
@@ -107,7 +91,7 @@ written.
 
 ## Phase 3: Agents automate each test case
 
-### Prompt 9: the wrong `/automate` ran
+### Prompt 6: the wrong `/automate` ran
 > /automate TC-UPLOAD-001
 
 **Where it went wrong:** the session was still open in my previous project, which also has an
@@ -116,7 +100,7 @@ test-management tool, checked that project's credentials, and used the old proje
 The AI spotted the references to the other project and stopped at preflight without running anything. On the second attempt it planned to work
 around the problem by following the new repo's file by hand. I interrupted that.
 
-### Prompt 10
+### Prompt 7
 > Can we create a different /command rather than using one with the same name?
 
 **Correction:** renamed the command to **`/pw-automate`**, matching the `pw-*` agent names, so it
@@ -124,7 +108,7 @@ can never collide with another project's `/automate`. All references (README, ag
 scenario map) were updated. Lesson: a command name is a global namespace across projects, so name
 it specifically.
 
-### Prompt 11: TC-UPLOAD-001 end to end
+### Prompt 8: TC-UPLOAD-001 end to end
 > /pw-automate TC-UPLOAD-001
 
 **What it did:** the scenario was `blocked` from an earlier run, because the Playwright MCP
@@ -152,14 +136,14 @@ ran. All green.
 download, checksum or storage access exists. "Valid file" is undefined, because there is no
 type or size rule. DEFECT-001 (empty submit → 500) was confirmed, for TC-002.
 
-### Prompt 12
+### Prompt 9
 > *(pasted the three open review suggestions)* Yes go ahead
 
 **What it did:** sent the three suggestions to Codegen: an exact `toHaveText` for the step-1
 heading, a 2xx range for step 3, and a total of exactly 1 POST after submit for step 2. They
 then went back through review and the gates.
 
-### Prompt 13: settling the rubric gaps
+### Prompt 10: settling the rubric gaps
 > Yes *(to the proposed conventions)*
 
 **Decision:** three rules the Reviewer had flagged as "conventions silent on" were added:
@@ -187,21 +171,21 @@ only what a run showed.
 - C-ASSERT-1 has now come up in 2 review logs. One more crosses the C-AGENT-9 threshold for
   adding it to the Codegen prompt.
 
-### Prompt 14
+### Prompt 11
 > Yes *(commit locally)*
 
 **What it did:** made the first commit (framework plus TC-001) on `main`. Nothing was pushed.
 It flagged that Git on Windows converts the `sample.txt` fixture to CRLF on checkout, which
 changes its size. That was fixed later with `.gitattributes`.
 
-### Prompt 15
+### Prompt 12
 > shall i run next test case now ?
 
 **What it did:** recommended TC-002 next, because its state had already been observed. It also
 suggested applying the review lessons to the Codegen prompt first. I went ahead without that,
-which cost a repeat finding (see Prompt 16).
+which cost a repeat finding (see Prompt 13).
 
-### Prompt 16: TC-UPLOAD-002, the deliberately failing test
+### Prompt 13: TC-UPLOAD-002, the deliberately failing test
 > /pw-automate TC-UPLOAD-002
 
 **What it did:** Explorer (one targeted loop) → Codegen → Review → Doc-Gap → gates. The result is
@@ -228,7 +212,7 @@ check, no request) *or* "a page telling the user to choose a file". The status c
 message wording are not specified either. If the bug is fixed the browser-side way, the test
 would time out instead of turning green. These are product-owner decisions, not test fixes.
 
-### Prompt 17
+### Prompt 14
 > Can we create a separate file for TC-UPLOAD-002?
 
 **What it did:** Codegen moved the test unchanged (checked byte for byte) into its own spec, and
@@ -236,24 +220,15 @@ a review confirmed the move. Doc-Gap may only append, so it added a table mappin
 references to the new ones instead of rewriting its earlier findings.
 **Where it went wrong:** stale references were missed in two places: a batch-report line and the
 Doc-Gap agent's own example. The Reviewer suggested a rule: after moving a file, grep the repo
-for the old path. That became part of C-TC-4 (Prompt 21).
+for the old path. That became part of C-TC-4 (Prompt 17).
 
-### Prompt 18: reading the doc-gaps report
-> So much of data in doc-gaps.md, what is it trying to say?
-
-**What it did:** summarised the file in plain terms. One real bug (DEFECT-001), four decisions
-only the product owner can make, one claim a test can never prove (that a file was *stored*),
-and small wording fixes.
-**Correction:** the report was too long to act on. From TC-003 on, Doc-Gap was told to lead each
-section with a 3–5 line **"Decisions needed"** summary.
-
-### Prompt 19
+### Prompt 15
 > Okay first commit
 
 **What it did:** committed the TC-002 work before starting TC-003, so each test case lands as its
 own commit.
 
-### Prompt 20: TC-UPLOAD-003, drag-and-drop
+### Prompt 16: TC-UPLOAD-003, drag-and-drop
 > /pw-automate TC-UPLOAD-003
 
 **What it did:** the Explorer produced a *real* drop: a `drop` DragEvent on `#drag-drop-upload`
@@ -277,7 +252,7 @@ This was also the first batch without the `toBeVisible`-instead-of-text pattern.
 visible distinguishes *uploaded* from *pending*. "Did not reset the form" can never fail, because
 the form was empty before the drop. A real drag from the desktop still needs a manual check.
 
-### Prompt 21
+### Prompt 17
 > Can we name them based on test case id? so its easy to track?
 
 **Decision:** new rule **C-TC-4**: one spec per test case, named `<ID>-<slug>.spec.ts`, and after
@@ -286,22 +261,22 @@ renamed the three specs with `git mv`; checksums were the same before and after.
 live references (scenario map, `covered_by`, batch reports, agent examples) and left dated
 records (review logs, doc-gaps) as written.
 
-### Prompt 22: checking against the brief
+### Prompt 18: checking against the brief
 > What is pending here? *(pasted the take-home brief)*
 
 **What it did:** checked the repo against each requirement. The tests and the deliberate failure
 were done. Missing were the "what I couldn't cover and what I'd need" write-up, this log from
-Prompt 14 on, a note that `npm test` exits non-zero by design, a clean-clone check, and delivery.
-It also flagged names from my earlier client project in Prompts 4–9, which are now placeholders.
+Prompt 11 on, a note that `npm test` exits non-zero by design, a clean-clone check, and delivery.
+It also flagged names from my earlier client project in Prompts 2 and 6, which are now placeholders.
 
-### Prompt 23
+### Prompt 19
 > Yes
 
 **What it did:** added the Results and "What I couldn't cover" sections to the README, the
 `.gitattributes` rule for fixtures, and this log; then committed and ran the one documented
 command from a fresh clone.
 
-### Prompt 24: the Node version was wrong
+### Prompt 20: the Node version was wrong
 > *(TODO: paste your exact prompt)*
 
 **Where it went wrong:** the README said an older Node version was enough. Playwright 1.64's
@@ -314,7 +289,7 @@ from memory.
 
 ## Phase 4: Using the spare time for TC-UPLOAD-004
 
-### Prompt 25
+### Prompt 21
 > *(TODO: paste your exact prompt)*
 
 **Decision:** TC-UPLOAD-004 (file names with spaces and non-ASCII characters) had been left out
@@ -323,7 +298,7 @@ only because of the time cap, and needed nothing from ComplyStream. I had the fi
 checked on its own before any test relied on it. The name on disk was checked byte by byte: each
 `é` is stored precomposed (NFC, `c3 a9`).
 
-### Prompt 26: TC-UPLOAD-004 end to end
+### Prompt 22: TC-UPLOAD-004 end to end
 > /pw-automate TC-UPLOAD-004
 
 **What it did:** Explorer (fifth session, file-chooser path only) → Codegen → Review (2 rounds)
@@ -342,7 +317,7 @@ page object unchanged and only added a fixture entry, as the test case had predi
   time per-assertion falsifiability has come up, so the Reviewer proposed making C-AGENT-4 require
   one inversion per property the expected result names.
 - **Codegen described code it hadn't written:** the batch report and a comment in
-  `tests/fixtures/index.ts` say the fixture name uses `é` escapes. That line is a literal `é`
+  `tests/fixtures/index.ts` say the fixture name uses `\u00e9` escapes. That line is a literal `é`
   (checked with `od -c`). This is now the third review log to catch a batch-report claim that the
   file or the runs don't support, which crosses the C-AGENT-9 threshold for a Codegen prompt change.
 - **Knowledge carried the same mistake:** a gotcha in `knowledge/pages/upload.yaml` still recommends
@@ -354,21 +329,13 @@ that spaces must stay plain spaces. Still out of reach: the stored name (same ac
 TC-UPLOAD-007), the filename bytes on the wire, the drag-and-drop path, and Firefox/WebKit.
 **Still open after the run:** the `index.ts` comment/literal mismatch (review round 1, finding 2),
 the `upload.yaml` gotcha (review round 2, finding r2-2) and the stale test-case text (Doc-Gap
-finding A). See Prompts 27–28.
+finding A). See Prompt 23.
 
-### Prompt 27: checking this log before submission
-> Can you go through the prompt file and see do we need to update any data ? as this will be checked
-
-**What it did:** compared this log with `git log` and the untracked TC-004 files. The log stopped at
-Prompt 23 and was missing the Node fix and the whole TC-004 run, so it added Prompts 24–26. It also
-found that the README still said "1 failed, 2 passed" and "Three are automated", and listed
-TC-004 under "couldn't cover".
-
-### Prompt 28
+### Prompt 23: final clean-up before submission
 > Yes go ahead
 
 **What it did:**
-- **Fixture name:** `tests/fixtures/index.ts` now really uses `é` escapes, so the comment is
+- **Fixture name:** `tests/fixtures/index.ts` now really uses `\u00e9` escapes, so the comment is
   true. The precondition step now also checks that the fixture path's name equals `EXPECTED_NAME`
   (review round 1, finding 2).
 - **Test case:** the TC-UPLOAD-004 text now uses Doc-Gap's proposed wording (signed off by me). It
@@ -378,7 +345,7 @@ TC-004 under "couldn't cover".
 - **Checks:** full suite: 1 failed (TC-002, on purpose), 3 passed; typecheck and knowledge gates clean.
 - **Committed** the TC-004 work.
 
-**Where it went wrong:** the first two attempts to write `é` into `index.ts` silently lost the
+**Where it went wrong:** the first two attempts to write `\u00e9` into `index.ts` silently lost the
 backslash in the shell and wrote `r00e9sum00e9`. Checking the bytes with `od -c` after each edit,
 rather than trusting the command, caught it. That is the same check the Reviewer had used to find
 the original mismatch.
