@@ -276,29 +276,11 @@ It also flagged names from my earlier client project in Prompts 2 and 6, which a
 `.gitattributes` rule for fixtures, and this log; then committed and ran the one documented
 command from a fresh clone.
 
-### Prompt 20: the Node version was wrong
-> *(TODO: paste your exact prompt)*
-
-**Where it went wrong:** the README said an older Node version was enough. Playwright 1.64's
-`engines` field needs **Node 20+**. The README was corrected and an `engines` entry was added to
-`package.json`, so `npm` warns on an older Node instead of failing in a confusing way
-(commit `0bd3668`). Lesson: take version requirements from the dependency's `engines` field, not
-from memory.
-
 ---
 
 ## Phase 4: Using the spare time for TC-UPLOAD-004
 
-### Prompt 21
-> *(TODO: paste your exact prompt)*
-
-**Decision:** TC-UPLOAD-004 (file names with spaces and non-ASCII characters) had been left out
-only because of the time cap, and needed nothing from ComplyStream. I had the fixture
-`résumé final (v2).txt` committed first, as its own commit (`0ec2f0c`), so the test data could be
-checked on its own before any test relied on it. The name on disk was checked byte by byte: each
-`é` is stored precomposed (NFC, `c3 a9`).
-
-### Prompt 22: TC-UPLOAD-004 end to end
+### Prompt 20: TC-UPLOAD-004 end to end
 > /pw-automate TC-UPLOAD-004
 
 **What it did:** Explorer (fifth session, file-chooser path only) → Codegen → Review (2 rounds)
@@ -329,9 +311,9 @@ that spaces must stay plain spaces. Still out of reach: the stored name (same ac
 TC-UPLOAD-007), the filename bytes on the wire, the drag-and-drop path, and Firefox/WebKit.
 **Still open after the run:** the `index.ts` comment/literal mismatch (review round 1, finding 2),
 the `upload.yaml` gotcha (review round 2, finding r2-2) and the stale test-case text (Doc-Gap
-finding A). See Prompt 23.
+finding A). See Prompt 21.
 
-### Prompt 23: final clean-up before submission
+### Prompt 21: final clean-up before submission
 > Yes go ahead
 
 **What it did:**
