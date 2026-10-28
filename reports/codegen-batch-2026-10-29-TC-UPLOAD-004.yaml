@@ -1,0 +1,143 @@
+batch_date: 2026-10-29
+test_case: TC-UPLOAD-004
+status: done   # generated and self-verified; scenario-map set to in_review pending the Reviewer
+files:
+  - tests/fixtures/index.ts                                  # files.unicodeNameTxt added
+  - tests/upload/TC-UPLOAD-004-unicode-file-name.spec.ts     # new file, TC-UPLOAD-004 only (C-TC-4)
+knowledge_updated:
+  - "knowledge/scenario-map.yaml: TC-UPLOAD-004 status explored -> in_review; files: tests/fixtures/index.ts, tests/upload/TC-UPLOAD-004-unicode-file-name.spec.ts"
+  - "knowledge/pages/upload.yaml: covered_by += 'tests/upload/TC-UPLOAD-004-unicode-file-name.spec.ts (TC-UPLOAD-004)' (C-KNOW-6)"
+reused:
+  - "pages/UploadPage.ts unchanged: goto(), heading, fileInput, chooseFile() (file-chooser event armed before the click), submit() (POST /upload response armed before the click), resultHeading, uploadedFiles (C-POM-4). No new locator or method was needed; the form path for a Unicode name is the same as for sample.txt."
+  - "tests/fixtures/index.ts: uploadPage fixture unchanged; only a new entry in the files map."
+
+coverage_check:
+  - step: 1
+    covered: true
+    facts: "states.unicode_name_file_chosen_not_submitted (chooser accepted the path unaltered; value 'C:\\fakepath\\résumé final (v2).txt'); states.unicode_name_successful_submit (POST /upload -> 200, h3 'File Uploaded!'); elements.file_input, upload_button, result_heading"
+  - step: 2
+    covered: true
+    facts: "elements.uploaded_files notes and states.unicode_name_successful_submit (innerText exactly 'résumé final (v2).txt', NFC, U+0020 spaces, no '%20' / '?' / 'Ã' / U+00A0); gotchas (toHaveText normalises the surrounding template whitespace; write the expected string as NFC)"
+
+fixture_changes:
+  - >
+    files.unicodeNameTxt = path.join(__dirname, 'files', 'r\u00e9sum\u00e9 final (v2).txt'): the committed
+    fixture from 0ec2f0c (89 bytes, NFC name). It is written with \u escapes so the source cannot drift to NFD.
+    `ls | od -c` confirmed the on-disk name bytes are r 303 251 s u m 303 251 ... (UTF-8 U+00E9, NFC).
+
+spec:
+  title: "TC-UPLOAD-004: File names with spaces and non-ASCII characters are preserved"
+  tags: ['@tc:TC-UPLOAD-004', '@upload']
+  path: "file chooser / form only (chooseFile + submit). No drag-and-drop (C-IO-3)."
+  grep_selection: "npx playwright test --list --grep @tc:TC-UPLOAD-004: 'Total: 1 test in 1 file', upload\\TC-UPLOAD-004-unicode-file-name.spec.ts:13:7 (C-TC-2)"
+
+steps_mapped:
+  - step: "precondition (not a test-case step)"
+    to: >
+      expect(fs.readdirSync(fixturesDir)).toContain(EXPECTED_NAME). This guards "exactly as on disk": if a
+      checkout ever stored the name as NFD (NOT YET OBSERVED in the knowledge), the test fails here with a
+      clear message, before it can fail confusingly at step 2.
+  - step: 1
+    to: >
+      uploadPage.goto(); expect(heading).toHaveText('File Uploader'); uploadPage.chooseFile(files.unicodeNameTxt);
+      expect(fileInput).toHaveValue('C:\\fakepath\\' + EXPECTED_NAME); const response = uploadPage.submit();
+      status asserted 2xx (>= 200 and < 300, the test case's range; 200 observed) (C-ASSERT-4);
+      expect(resultHeading).toHaveText('File Uploaded!')
+  - step: 2
+    to: >
+      expect(uploadPage.uploadedFiles).toHaveText(EXACT_NAME_TEXT) (spec:55), where spec:20 is
+      `const EXACT_NAME_TEXT = new RegExp('^[\\n ]*' + escapeRegExp(EXPECTED_NAME) + '[\\n ]*$');` and
+      EXPECTED_NAME = 'r\u00e9sum\u00e9 final (v2).txt' (spec:10, \u escapes). Review r1 blocker 1 (C-ASSERT-1):
+      the earlier toHaveText(EXPECTED_NAME) string form normalised the RECEIVED text too (coreBundle.js:562
+      normalizeWhiteSpace: strip U+200B/U+00AD, trim, collapse /\s+/ to ' '), so a changed internal space passed
+      (proven, self_verify.round_2_review_fix.a). A RegExp expectation is not normalised, so the name is compared
+      code point by code point. The only slack is [\n ]* at each end: the template wrapping recorded in knowledge
+      (elements.uploaded_files / states.unicode_name_successful_submit: textContent "\n    <name>\n  ").
+
+self_verify:   # C-AGENT-4. Only what the runs showed.
+  command: 'npx playwright test --grep "@tc:TC-UPLOAD-004" --retries=0'
+  round_2_review_fix:   # 2026-10-29, applying review-log 2026-10-29-TC-UPLOAD-004 blocker 1 only
+    a_gap_before_fix: >
+      With the ORIGINAL string assertion, changed spec:43 to toHaveText(EXPECTED_NAME.replace(' ', '<U+00A0>'))
+      (od -c of the line showed bytes 302 240 = U+00A0; the expected code points were
+      72 e9 73 75 6d e9 a0 66 69 6e 61 6c 20 28 76 32 29 2e 74 78 74). PASSED (1 passed, 3.2s test / 4.0s total)
+      against the page's plain U+0020 name. This proves the gap: the string form could not tell U+00A0 from U+0020.
+      (One earlier attempt at this inversion is void: a sed escaping error inserted the literal text '00a0' rather
+      than U+00A0. It was reverted from the backup with cmp IDENTICAL and is not counted.) Reverted from the
+      backup: cmp IDENTICAL.
+    b1_fixed_pass: "After the fix (anchored RegExp, spec:20 and spec:55): PASSED (1 passed, 3.2s test / 4.3s total). The test is now at spec:23:7."
+    b2_nbsp_inversion_fails: >
+      Changed spec:20 to escapeRegExp(EXPECTED_NAME.replace(' ', '\u00a0')) (od -c confirmed a single-backslash
+      \u00a0 escape; a first edit had written '\\u00a0' and was corrected before the run). FAILED (13.1s) in step
+      "2. The uploaded-file name is shown exactly as on disk" at spec:55:48:
+      'Error: expect(locator).toHaveText(expected) failed / Locator: locator('#uploaded-files') / Timeout: 10000ms /
+      Expected pattern: /^[\n ]*résumé final \(v2\)\.txt[\n ]*$/ / Received string: "\n    résumé final (v2).txt\n  "',
+      call log '23 × locator resolved to <div id="uploaded-files" class="panel text-center">↵    résumé final (v2).txt↵  </div>'.
+      Caveat: the message prints the U+00A0 as an ordinary space, so the difference cannot be seen in the output;
+      the code points above are the evidence.
+    b3_pct20_inversion_fails: >
+      Restored the fixed spec (cmp IDENTICAL), then changed spec:20 to escapeRegExp(EXPECTED_NAME.replace(/ /g, '%20')).
+      FAILED (15.2s) in step 2 at spec:55:48 with 'Error: expect(locator).toHaveText(expected) failed /
+      Locator: locator('#uploaded-files') / Timeout: 10000ms / Expected pattern: /^[\n ]*résumé%20final%20\(v2\)\.txt[\n ]*$/ /
+      Received string: "\n    résumé final (v2).txt\n  "', same call log.
+    b4_reverted_pass: >
+      Restored the fixed spec from the copy taken after the fix: cmp IDENTICAL. grep for the inverted code
+      ("replace(/ /g" / "replace(' '") found 0 matches; the only "%20'" match is the comment at spec:53. PASSED
+      (1 passed, 3.2s test / 4.0s total).
+    gates: "npm run typecheck (tsc --noEmit): clean. npm run knowledge: 1. YAML tabs OK; 2. locator traceability (C-LOC-4) OK."
+    not_rerun: "The TC-UPLOAD-001 regression was not rerun; this round changed only the TC-UPLOAD-004 spec."
+  # round 1 (original generation) below, left as written; its line numbers (spec:43:48, :13:7) predate the fix.
+  run_1_pass: "PASSED (1 passed, 8.0s test / 11.1s total)."
+  run_2_inverted: >
+    Changed step 2's assertion to toHaveText("resume%20final%20(v2).txt"). FAILED (13.4s) in step
+    "2. The uploaded-file name is shown exactly as on disk" at TC-UPLOAD-004-unicode-file-name.spec.ts:43:48 with
+    'Error: expect(locator).toHaveText(expected) failed / Locator: locator('#uploaded-files') / Timeout: 10000ms /
+    - resume%20final%20(v2).txt / + résumé final (v2).txt', call log
+    '23 × locator resolved to <div id="uploaded-files" class="panel text-center">↵    résumé final (v2).txt↵  </div>'.
+    The precondition and step 1 passed in this run.
+  run_2b_inverted_nfd: >
+    Extra inversion: changed step 2 to toHaveText(EXPECTED_NAME.normalize("NFD")). FAILED in step 2 with the
+    same 'expect(locator).toHaveText(expected) failed / Locator: locator('#uploaded-files')' message; the
+    Expected and Received lines both render as 'résumé final (v2).txt'. This shows that toHaveText does not
+    Unicode-normalise, so a decomposed (mangled-accent) echo from the server would be caught. Caveat: the
+    message cannot show the difference visually.
+  run_3_reverted: >
+    Restored the spec from a copy taken before the inversions; cmp reported IDENTICAL and grep found 0
+    occurrences of the inverted strings. PASSED (1 passed, 3.4s test / 5.4s total).
+  regression_TC_UPLOAD_001: 'npx playwright test --grep "@tc:TC-UPLOAD-001" --retries=0: PASSED (1 passed, 7.3s) after the additive change to tests/fixtures/index.ts'
+  not_proven_by_runs: >
+    Only the step-2 name assertion was inverted. The 2xx status, the toHaveValue and the precondition were
+    seen to pass but were not individually inverted.
+  gates:
+    typecheck: "npm run typecheck (tsc --noEmit): clean"
+    knowledge: "npm run knowledge: YAML tabs OK; locator traceability (C-LOC-4) OK (run again after the knowledge edits)"
+
+not_generated:
+  - >
+    Separate negative checks for '%20', '?', mojibake and changed whitespace (for example not.toContainText('%20')).
+    Corrected in round 2: the original premise was wrong. The string toHaveText rejected '%20', '?', mojibake and
+    NFD, but NOT changes to whitespace, because it normalises the received text (U+00A0, doubled spaces, U+00AD and
+    U+200B all passed; round_2_review_fix.a showed this for U+00A0). The core assertion is now the anchored RegExp,
+    which compares the name code point by code point. round_2_review_fix.b2 (U+00A0) and b3 ('%20') show that it
+    rejects both. Separate negative checks would still duplicate it, so they were left out. Doubled spaces, U+00AD
+    and U+200B were not individually inverted; they are covered by the regex, not by a run.
+  - >
+    The multipart Content-Disposition filename encoding the browser sent (raw UTF-8 or filename*). This is
+    NOT YET OBSERVED in the knowledge, and the test case asks only for the 2xx and the rendered name.
+  - "Drag-and-drop with the Unicode name, an NFD-named fixture, and Firefox/WebKit: out of scope per the task and NOT YET OBSERVED in the knowledge."
+  - "A POST /upload request counter (as in TC-UPLOAD-001): the test case does not ask whether choosing the file sends a request."
+
+test_case_disagreements:   # for Doc-Gap; the test case was not edited (C-TC-1)
+  - "Test data says the fixture is 'not committed yet'. It was committed in 0ec2f0c (tests/fixtures/files/résumé final (v2).txt), so this line is stale."
+  - "'Automate: Not now ... time-boxed' and 'What would be needed: ... left out only because of the 4-hour cap' are stale now that the test is automated."
+  - >
+    Step 2 says "exactly as on disk" but does not say which Unicode normalisation form. The test pins NFC because
+    the knowledge observed that form on disk, in the chooser and in the echo. A filesystem that returns NFD
+    (macOS HFS+-style) is unobserved, and the precondition step would fail there rather than the name check.
+
+conventions_silent_on:
+  - >
+    Unicode normalisation in expected strings. C-ASSERT-1 asks for exact text but says nothing about NFC vs NFD.
+    The spec writes the literal with \u escapes, following the knowledge gotcha, not a rule.
+  - "Whether a spec may read the filesystem (fs.readdirSync) for a precondition. C-LOC-5 covers locators only; this is not a locator."
+  - "Extra inversions beyond the one C-AGENT-4 requires (run_2b). Recorded as additional evidence, not as a substitute."

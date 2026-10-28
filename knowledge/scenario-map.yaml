@@ -36,3 +36,11 @@ scenarios:
     files:
       - pages/UploadPage.ts
       - tests/upload/TC-UPLOAD-003-drag-drop.spec.ts
+
+  - id: TC-UPLOAD-004
+    title: File names with spaces and non-ASCII characters are preserved
+    page: pages/upload
+    status: done
+    files:
+      - tests/fixtures/index.ts
+      - tests/upload/TC-UPLOAD-004-unicode-file-name.spec.ts

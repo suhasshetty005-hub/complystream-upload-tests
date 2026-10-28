@@ -300,3 +300,88 @@ It also flagged names from my earlier client project in Prompts 4–9, which are
 **What it did:** added the Results and "What I couldn't cover" sections to the README, the
 `.gitattributes` rule for fixtures, and this log; then committed and ran the one documented
 command from a fresh clone.
+
+### Prompt 24: the Node version was wrong
+> *(TODO: paste your exact prompt)*
+
+**Where it went wrong:** the README said an older Node version was enough. Playwright 1.64's
+`engines` field needs **Node 20+**. The README was corrected and an `engines` entry was added to
+`package.json`, so `npm` warns on an older Node instead of failing in a confusing way
+(commit `0bd3668`). Lesson: take version requirements from the dependency's `engines` field, not
+from memory.
+
+---
+
+## Phase 4: Using the spare time for TC-UPLOAD-004
+
+### Prompt 25
+> *(TODO: paste your exact prompt)*
+
+**Decision:** TC-UPLOAD-004 (file names with spaces and non-ASCII characters) had been left out
+only because of the time cap, and needed nothing from ComplyStream. I had the fixture
+`résumé final (v2).txt` committed first, as its own commit (`0ec2f0c`), so the test data could be
+checked on its own before any test relied on it. The name on disk was checked byte by byte: each
+`é` is stored precomposed (NFC, `c3 a9`).
+
+### Prompt 26: TC-UPLOAD-004 end to end
+> /pw-automate TC-UPLOAD-004
+
+**What it did:** Explorer (fifth session, file-chooser path only) → Codegen → Review (2 rounds)
+→ Doc-Gap. The page echoes the name with exactly the same code points as on disk. It reused the
+page object unchanged and only added a fixture entry, as the test case had predicted.
+**Where the agents got it wrong:**
+- **Codegen, step 2 (Review blocker):** it asserted the name with `toHaveText('résumé final (v2).txt')`.
+  The Reviewer read Playwright's source and found that the string form normalises the **received**
+  text as well (trims, collapses any whitespace run, including a non-breaking space, to one space).
+  So the test could not see a changed space, which is half of what the case tests. Codegen **proved
+  the gap** first (a U+00A0 in the expected name still *passed*), then switched to an anchored
+  RegExp that allows only the observed template newlines and spaces around the name. With that,
+  the U+00A0 and `%20` inversions both fail.
+- **The single inversion picked the wrong property.** Round 1 inverted only the accent side of
+  "exactly" (`%20`, NFD), never the whitespace side, which is where the bug was. This is the third
+  time per-assertion falsifiability has come up, so the Reviewer proposed making C-AGENT-4 require
+  one inversion per property the expected result names.
+- **Codegen described code it hadn't written:** the batch report and a comment in
+  `tests/fixtures/index.ts` say the fixture name uses `é` escapes. That line is a literal `é`
+  (checked with `od -c`). This is now the third review log to catch a batch-report claim that the
+  file or the runs don't support, which crosses the C-AGENT-9 threshold for a Codegen prompt change.
+- **Knowledge carried the same mistake:** a gotcha in `knowledge/pages/upload.yaml` still recommends
+  `toHaveText('<name>')` as an exact check. Because Codegen works from knowledge alone, the next
+  test would bring the blocker back. That fix belongs to the Explorer.
+**Doc-Gap:** no new defect. The test case itself is stale (it still says "not committed yet" and
+"Not now"), and "exactly as on disk" names no Unicode form (NFC vs NFD) and doesn't say outright
+that spaces must stay plain spaces. Still out of reach: the stored name (same access as
+TC-UPLOAD-007), the filename bytes on the wire, the drag-and-drop path, and Firefox/WebKit.
+**Still open after the run:** the `index.ts` comment/literal mismatch (review round 1, finding 2),
+the `upload.yaml` gotcha (review round 2, finding r2-2) and the stale test-case text (Doc-Gap
+finding A). See Prompts 27–28.
+
+### Prompt 27: checking this log before submission
+> Can you go through the prompt file and see do we need to update any data ? as this will be checked
+
+**What it did:** compared this log with `git log` and the untracked TC-004 files. The log stopped at
+Prompt 23 and was missing the Node fix and the whole TC-004 run, so it added Prompts 24–26. It also
+found that the README still said "1 failed, 2 passed" and "Three are automated", and listed
+TC-004 under "couldn't cover".
+
+### Prompt 28
+> Yes go ahead
+
+**What it did:**
+- **Fixture name:** `tests/fixtures/index.ts` now really uses `é` escapes, so the comment is
+  true. The precondition step now also checks that the fixture path's name equals `EXPECTED_NAME`
+  (review round 1, finding 2).
+- **Test case:** the TC-UPLOAD-004 text now uses Doc-Gap's proposed wording (signed off by me). It
+  says the test is automated, the fixture is committed, and step 2 names NFC and plain spaces.
+  The open scenarios are listed.
+- **README:** updated to four automated tests and "1 failed, 3 passed".
+- **Checks:** full suite: 1 failed (TC-002, on purpose), 3 passed; typecheck and knowledge gates clean.
+- **Committed** the TC-004 work.
+
+**Where it went wrong:** the first two attempts to write `é` into `index.ts` silently lost the
+backslash in the shell and wrote `r00e9sum00e9`. Checking the bytes with `od -c` after each edit,
+rather than trusting the command, caught it. That is the same check the Reviewer had used to find
+the original mismatch.
+**Left open on purpose:** the `upload.yaml` gotcha (r2-2) is a knowledge fix, and only the Explorer
+writes knowledge (C-AGENT-1). The Codegen prompt changes the Reviewer recommended (check every
+batch-report claim against the file; one inversion per property) are listed as next steps.

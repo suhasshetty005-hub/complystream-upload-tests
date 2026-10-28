@@ -346,3 +346,154 @@ session); reports/codegen-batch-2026-10-28-TC-UPLOAD-003.yaml; reports/review-lo
 - **The drop's success response is not rendered: merged into A** (user-visible side). For whether the file was stored, see the existing "file is persisted" finding in the TC-UPLOAD-001 section. The drop response does echo `sample.txt` (states.drag_drop request), so the drop path can reach the same "200 + name echoed" level as the form path. The test checks only the 2xx, which is all step 2 asks for (batch not_generated[0]). Optional: add "the response echoes sample.txt" to step 2.
 - **Cross-browser (Chromium only): rejected.** It is already in the TC-003 Notes and in TC-UPLOAD-009 (see D).
 - **`/\bdz-success\b/` also matches `dz-success-mark`: not a doc gap.** It is a test and knowledge wording fix (review-log suggestion 1).
+
+## 2026-10-29 — TC-UPLOAD-004 · pages/upload
+
+Sources: test-cases/TC-UPLOAD-004.md; knowledge/pages/upload.yaml (last_observed 2026-10-29, fifth session,
+scope TC-UPLOAD-004 steps 1-2, file-chooser form flow only); knowledge/scenario-map.yaml (TC-UPLOAD-004
+in_review); reports/codegen-batch-2026-10-29-TC-UPLOAD-004.yaml (test_case_disagreements[0..2],
+not_generated[0..3]); reports/review-log/2026-10-29-TC-UPLOAD-004.yaml (round 1 changes_requested, round 2
+approved). Spec: tests/upload/TC-UPLOAD-004-unicode-file-name.spec.ts. Fixture committed in 0ec2f0c at the
+user's request. Test status: passes live (review-log round 2: "1 passed (3.1s test / 3.9s total)").
+knowledge/pages/upload.yaml doc_discrepancies has no entry for TC-UPLOAD-004, so every finding below comes
+from comparing the steps with the states, plus the points the other agents raised.
+**No new DEFECT id.** For the one path observed (Chromium, file chooser, NFC name), the page does what
+steps 1 and 2 ask.
+
+**Decisions needed**
+1. **Sign off** the rewrite of the stale header, test data and "What would be needed" lines (finding A).
+2. **Step 2:** decide which Unicode form "exactly as on disk" means, and say outright that spaces must stay
+   plain spaces (finding C).
+3. **Explorer:** correct the gotcha at upload.yaml:160 (finding B). This is a knowledge fix, not a test-case fix.
+4. **Accept or scope** the scenarios that cannot be checked today: the stored name, the encoding on the wire,
+   the drop path and other browsers (findings D-G).
+
+### A · Stale: the header, the test data and "What would be needed" describe a test that has not been written
+- **Test case says:** "**Automate:** Not now. It is time-boxed; it could be added with the existing page
+  object and one new fixture." (line 5). Test data: "A fixture such as `résumé final (v2).txt` (not committed
+  yet)" (line 9). "What would be needed: Nothing from ComplyStream. It was left out only because of the 4-hour
+  cap." (line 23).
+- **Now true:** the fixture is committed (0ec2f0c; review-log round 1 header: `git ls-files` lists
+  "tests/fixtures/files/r\303\251sum\303\251 final (v2).txt", 89 bytes). The test exists and is approved
+  (knowledge covered_by[3]; scenario-map TC-UPLOAD-004). As the header predicted, it used the existing page
+  object without changes and needed one new fixture (batch `reused`: "pages/UploadPage.ts unchanged").
+  The header's estimate was right; only its status is out of date.
+- **Confirmed:** this matches batch test_case_disagreements[0] and [1].
+- **Proposed wording:**
+  - Header: "**Automate:** Yes. tests/upload/TC-UPLOAD-004-unicode-file-name.spec.ts (file chooser path only)."
+  - Test data: "`tests/fixtures/files/résumé final (v2).txt` (committed in 0ec2f0c; 89 bytes; the name is stored
+    as NFC, with each é as U+00E9)." Source: knowledge header comment, fifth session; states.unicode_name_file_chosen_not_submitted.
+  - "What would be needed": replace it with the "still not covered" list from findings D-G below.
+
+### B · Contradiction (knowledge-file side, not the app): gotcha at upload.yaml:160 gives a whitespace check that is not exact
+- **Knowledge says (gotchas[5], upload.yaml:160):** "Use toHaveText('<name>'), which normalises whitespace,
+  or trim before an exact comparison. ... The name's internal single spaces are plain U+0020, so whitespace
+  normalisation does not change 'résumé final (v2).txt'."
+- **What Playwright does:** toHaveText(string) normalises the **received** text as well as the expected one.
+  It strips U+200B/U+00AD, trims, and collapses each `\s+` run, including U+00A0, to one space (review-log
+  round 1 finding 1, from coreBundle.js:562). **Evidence from a run:** with the string form, an expected name
+  containing U+00A0 PASSED against the page's U+0020 name (batch self_verify.round_2_review_fix.a_gap_before_fix).
+  Doubled spaces, U+00AD and U+200B were **not run**. They are inferred from the same code (review-log round 2
+  finding r2-1), so treat them as likely, not proven.
+- **Which side is wrong:** the gotcha. Its last sentence is true of the expected string, but a reader will take
+  it as advice on how to check the name exactly, and as that advice it fails. The page itself is fine:
+  textContent contains U+00A0 is false (states.unicode_name_successful_submit). The spec already does it the
+  right way (anchored RegExp, spec:20 and spec:55; round_2_review_fix.b2 shows the U+00A0 inversion failing).
+- **Severity:** medium for future tests (Codegen works from knowledge alone, review-log r2-2 why_it_matters);
+  none for TC-UPLOAD-004 today. **Certainty:** high for U+00A0 (one run), inferred for the other three.
+- **Proposed fix (Explorer, as in review-log r2-2):** replace the last sentence with "toHaveText(string)
+  normalises the received text too (strips U+200B/U+00AD, trims, collapses any \s run, including U+00A0, to
+  one space), so it cannot detect a changed internal space. When spaces are part of the value, use an anchored
+  RegExp built from the escaped name, allowing only the observed template wrapping ([\n ]*) at each end."
+- **Related, not a doc gap:** elements.uploaded_files notes (upload.yaml:93) also say "use toHaveText('sample.txt'),
+  which normalises whitespace". For sample.txt, which has no spaces, this is harmless. It should point to the
+  same gotcha.
+
+### C · Unverifiable scenario (spec gap): step 2 "exactly as on disk" names no Unicode normalisation form, and does not mention spaces
+- **Test case says (step 2):** "The name is shown exactly as on disk, with no `%20`, `?` or mangled accents".
+- **What was observed:** one form only. The on-disk bytes for each é are c3a9 (NFC), files[0].name is NFC, and
+  the echoed innerText has "code points identical to files[0].name" (states.unicode_name_file_chosen_not_submitted;
+  states.unicode_name_successful_submit; gotchas[6]). "Behaviour with a filesystem that returns NFD is NOT YET
+  OBSERVED" (gotchas[6]; not_yet_observed[1]). No NFD fixture is committed (not_yet_observed[1]).
+- **Why it is a gap:** "on disk" depends on the filesystem. If a checkout or upload source gives the name as NFD
+  (e + U+0301), there are two possible readings. (a) Byte-exact: the page must echo NFD. (b) Canonically
+  equivalent: NFC or NFD is fine. The case does not say which. The test pins NFC (spec:10), and the
+  precondition step (spec:27-32) fails on a checkout that is not NFC before it reaches the app (batch
+  test_case_disagreements[2]). The reviewer accepted this because "Pinning NFC is therefore pinning the on-disk
+  form" as observed (review-log round 1, ruling 2). So the test is right for the one environment observed. It
+  is a test-data guard, not a check of the app on NFD input.
+- **Second half of the gap:** the title promises that "spaces ... are preserved", but step 2 lists only `%20`,
+  `?` and accents. The test also rejects a changed internal space (round_2_review_fix.b2). That reading of
+  "exactly" is correct, but the case should say it outright, so that a future rewrite does not lose it.
+- **Proposed wording (step 2):** "The name is shown with the same code points as the fixture name (NFC; each é
+  is U+00E9; spaces are U+0020). No `%20`, no `?`, no mojibake such as `Ã©`, no non-breaking or collapsed spaces."
+  If the product owner wants reading (b), add: "A canonically equivalent form (NFC/NFD) is also accepted."
+- **Needs:** (1) a product decision between (a) and (b). For compliance records (Why it matters) byte-exact is
+  the stricter choice, but this report does not choose. (2) For NFD to be covered, an Explorer session with an
+  NFD-named fixture and a decision on how to commit one: the name of the committed file depends on the
+  filesystem, so the File may have to be built in the page instead. This is an inference, not observed.
+
+### D · Unverifiable scenario: the server stored the file under the correct name (the "compliance record" in Why it matters)
+- **Test case implies (Why it matters):** "a signed document whose name doesn't match the original". This is
+  about the stored record, not the page.
+- **What the page can prove:** more than a client-side echo, less than storage. The success page is a new
+  document from the server after the form POST (states.unicode_name_successful_submit: "full-page form
+  submit; Navigation Timing type 'navigate', responseStatus 200"). So the name in #uploaded-files came back
+  from the server after it parsed the multipart request. It was not filled in by the page's own script. The
+  page still shows no storage id, size, checksum or retrieval link (same limit as the TC-UPLOAD-001 "file is
+  persisted" finding above; TC-UPLOAD-007 lines 15-16: "The page only echoes the file **name** back").
+- **Consequence:** the green test proves "the server's response echoes the name code point for code point".
+  It does not prove "the stored record carries that name".
+- **Needs:** read access to the upload storage (a listing that shows the stored object name as bytes), or a GET
+  endpoint that returns uploaded files with their names, or the audit-log entry an upload writes. This is the
+  same access TC-UPLOAD-007 needs, so ask for it once.
+
+### E · Unverifiable scenario (not yet observed, can be observed): how the browser encoded the name on the wire
+- **Knowledge says:** "the multipart Content-Disposition filename encoding (raw UTF-8 vs filename*) was not
+  captured; only the rendered result was" (not_yet_observed[0]; states.unicode_name_successful_submit: "Request
+  body and headers not captured"). Batch not_generated[1] leaves it out for the same reason.
+- **Why it matters here:** a correct echo can hide two cancelling errors, for example the browser sending one
+  form and the server decoding and re-encoding it on the way back. Wire bytes would rule this out. Today the
+  test case asks only for the 2xx and the shown name, so this is not a missing assertion. It is a scenario
+  the case's purpose implies.
+- **Needs:** nothing from ComplyStream. It needs an Explorer session that captures the POST /upload request body
+  (for example request.postDataBuffer() on the form submit) and records the Content-Disposition `filename`
+  bytes. It is also Chromium-specific (see G).
+
+### F · Missing coverage: a Unicode name on the drag-and-drop path
+- **The page has:** a second upload path (Dropzone XHR, states.drag_drop). "Unicode-name upload via
+  drag-and-drop ... was not exercised" (not_yet_observed[1]; batch not_generated[2]). TC-UPLOAD-004 step 1
+  names only the file chooser, so this is not a gap in step 1. But the title ("File names ... are preserved")
+  covers every path, and TC-UPLOAD-003 uses only `sample.txt`.
+- **Why it cannot be checked the same way:** on the drop path, the name the user sees comes from the browser.
+  Dropzone fills `[data-dz-name]` "immediately on drop (before the request completes)"
+  (elements.dropzone_file_name notes), and "Dropzone discards that HTML; it is not rendered" (states.drag_drop
+  request; gotchas[13]). So the page cannot show whether the server kept the name. Only the XHR response body
+  (#uploaded-files in the discarded HTML) can, which gotchas[13] already suggests for sample.txt.
+- **Proposed:** a step in TC-UPLOAD-003 or TC-UPLOAD-004: "Drop `résumé final (v2).txt` on the zone. The
+  POST /upload response body's #uploaded-files shows the name with the same code points." Low-medium priority.
+- **Needs:** an Explorer observation of a Unicode-name drop that records the response body.
+
+### G · Unverifiable scenario: Unicode names in Firefox and WebKit
+- **Knowledge says:** "Unicode-name upload in Firefox or WebKit: only the MCP Chromium browser was used"
+  (not_yet_observed[2]). Browsers can differ in how they encode multipart filenames (see E), so a Chromium pass
+  does not carry over. This is an inference, not observed.
+- **No test case covers it:** TC-UPLOAD-009 step 1 is "Run TC-UPLOAD-001 and 003 in Firefox and WebKit".
+  It does not include 004.
+- **Needs:** the supported-browser list (TC-UPLOAD-009 "What would be needed", line 33). After that, add
+  TC-UPLOAD-004 to TC-UPLOAD-009 step 1. Side note: the spec's step-1 `toHaveValue('C:\\fakepath\\' + name)`
+  (spec:39) is a browser convention recorded in Chromium only. See the same side note in the TC-UPLOAD-001
+  section above.
+
+### Candidates reviewed and rejected (not doc gaps)
+- **Step 1 "Upload succeeds (2xx)": rejected.** 200 was observed (states.unicode_name_successful_submit), and the
+  spec asserts the range the case states (spec:43-45), as settled in TC-UPLOAD-001.
+- **Step 2 vs the page: no contradiction.** "%20 false, '?' false, 'Ã' ... false, U+00A0 false", and the code
+  points match files[0].name (states.unicode_name_successful_submit). The page does what the case asks.
+- **index.ts:10-13 comment claims \u escapes, but line 13 is a literal é: not a doc gap.** This is a code and
+  batch-report accuracy point, still open for the human (review-log round 1 finding 2, carried in round 2).
+  It does not affect the test case or the page.
+- **Batch not_generated[0] states an inference as a run result, and spec.grep_selection is stale
+  (spec:13:7 vs 23:7): not doc gaps.** These are batch-report accuracy points (review-log r2-1).
+- **scenario-map TC-UPLOAD-004 is `in_review` after an approved review: not a gap.** The orchestrator sets
+  `done` (review-log round 1, B5).

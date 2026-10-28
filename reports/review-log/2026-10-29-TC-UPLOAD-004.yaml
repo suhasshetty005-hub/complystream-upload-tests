@@ -1,0 +1,257 @@
+reviewed: 2026-10-29
+test_case: TC-UPLOAD-004
+batch: reports/codegen-batch-2026-10-29-TC-UPLOAD-004.yaml
+verdict: changes_requested
+
+# Scope: `git diff` (knowledge/pages/upload.yaml, knowledge/scenario-map.yaml, tests/fixtures/index.ts), plus the
+# untracked tests/upload/TC-UPLOAD-004-unicode-file-name.spec.ts and the batch report, read in full. The fixture
+# tests/fixtures/files/résumé final (v2).txt was committed in 0ec2f0c. pages/UploadPage.ts is unchanged.
+#
+# Reviewer's own runs (2026-10-29, local, --retries=0):
+#   npm run typecheck                                     -> clean (tsc --noEmit, no output)
+#   npm run knowledge                                     -> YAML tabs OK; C-LOC-4 traceability OK
+#   npx playwright test --list --grep "@tc:TC-UPLOAD-004" -> Total: 1 test in 1 file, spec:13:7 (C-TC-2)
+#   npx playwright test --grep "@tc:TC-UPLOAD-004"        -> 1 passed (3.3s)
+#   Fixture: git ls-files lists "tests/fixtures/files/r\303\251sum\303\251 final (v2).txt"; 89 bytes; content is
+#   one harmless line of plain text (C-IO-1). `ls | od -c` shows on-disk name bytes r 303 251 s u m 303 251 (NFC).
+#
+# Orchestrator observation (index.ts:13 literal vs "\u escapes" claim): CONFIRMED by the reviewer.
+#   `sed -n 13p tests/fixtures/index.ts | od -c` -> ... ' r 303 251 s u m 303 251   f i n a l ...: a literal
+#   precomposed é in UTF-8, NOT a é escape. `grep u00e9` matches only spec:10. So the doc comment at
+#   index.ts:10-11 and batch report fixture_changes (:24-25, which also quotes the code as 'résumé ...')
+#   are both false. Behaviour today is correct: the literal is NFC and matches the disk, and the test passes.
+#   Impact if the literal ever drifted to NFD: a loud failure, not a false pass (chooseFile cannot find the path on
+#   NTFS; elsewhere step 2 would mismatch). The precondition step does NOT catch it, because it checks the
+#   directory listing against EXPECTED_NAME and never compares it with files.unicodeNameTxt. Graded as a suggestion
+#   (finding 2), because no rule is broken and no false pass results. A human may upgrade it.
+#
+# Checklist A
+#   A1 self-verification (C-AGENT-4): present and convincing. Pass -> step-2 expected inverted to
+#      'resume%20final%20(v2).txt' -> failed at spec:43:48 with the real toHaveText diff -> run_2b NFD inversion
+#      failed -> restored (cmp IDENTICAL, grep 0) -> pass; TC-001 regression pass. not_proven_by_runs is honest.
+#      It did not probe the whitespace side of "exactly", which is where the blocker is (finding 1).
+#   A2 coverage (C-TC-3): step 1 (2xx + 'File Uploaded!') and step 2 (name) are both asserted. not_generated explains
+#      the omitted negative checks, on the premise that the exact toHaveText rejects them. That premise holds for
+#      '%20', '?' and mojibake, but not for whitespace substitutions (finding 1).
+#   A3 knowledge: 'File Uploader', the fakepath value, the 2xx range (200 observed), 'File Uploaded!' and the name
+#      with its code points all trace to upload.yaml (states.unicode_name_*, elements.uploaded_files, gotchas).
+#   A4 upload path: the form path via chooseFile (filechooser armed before the click) + submit(). The title and steps
+#      claim nothing about drag-and-drop (C-IO-3).
+#   A5 conventions: no raw locators in the spec (C-LOC-5); no sleeps (C-WAIT-1); steps wrapped (C-ASSERT-3); status +
+#      page both asserted (C-ASSERT-4); fixture used, no `new UploadPage` (C-POM-2); page object reused unchanged
+#      (C-POM-4); C-TC-4 file name; the 2xx range matches the test case (as settled in TC-001 r1). node:fs/node:path
+#      are built-ins (C-AGENT-10, as settled in the TC-003 log). No listener, so C-POM-5 is not engaged.
+#   A6 assertion strength: one blocker (finding 1).
+#   A7 n/a (not a known-defect test).
+#
+# Rulings requested on Codegen's conventions_silent_on items
+#   1. fs.readdirSync precondition (spec:17-22): ACCEPTED, no finding against it as a practice. The rubric is
+#      silent. C-LOC-5 governs locators only. The step reads only the committed fixture directory (consistent with
+#      C-IO-1), uses Node built-ins (C-AGENT-10), is wrapped and clearly titled as a precondition rather than a
+#      test-case step (C-ASSERT-3; it adds no requirement on the app, so C-TC-1 is not engaged), and C-WAIT-2 does not
+#      apply to a static filesystem read. It does what it says: it turns an unobserved NFD checkout into a clear,
+#      early failure. One gap: it does not tie EXPECTED_NAME to the path the test actually uploads (finding 2 fix).
+#      Kept under conventions_silent_on for a human to codify.
+#   2. Pinning NFC in the expected string (spec:10): ACCEPTED, no finding. This is not an invented requirement.
+#      The test case says "exactly as on disk", and the knowledge observed NFC at all three points: the on-disk
+#      bytes (c3a9), files[0].name (normalize('NFC') === name) and the echoed innerText (identical code points).
+#      Pinning NFC is therefore pinning the on-disk form, which C-ASSERT-1 (whole value) requires. run_2b shows
+#      that toHaveText does not Unicode-normalise, so the pin is a real check. Writing it with é escapes
+#      follows the knowledge gotcha. Which form a test must use where the test case does not name one stays a
+#      rubric gap (conventions_silent_on).
+#
+# Checklist B (knowledge/pages/upload.yaml, knowledge/scenario-map.yaml)
+#   B1: no new elements. The elements.uploaded_files notes extension is observational (C-KNOW-3 unaffected).
+#   B2: states.unicode_name_file_chosen_not_submitted and unicode_name_successful_submit were exercised in the fifth
+#       session, with code points, normalisation checks, '%20'/'?'/'Ã'/U+00A0 absence checks and Navigation Timing.
+#   B3: not_yet_observed updated honestly: Content-Disposition encoding, drag-drop with the Unicode name, an NFD
+#       fixture, Firefox/WebKit. The stale "865 ms and 2823 ms" line flagged in the TC-003 log is now fixed.
+#   B4: claims trace to observations. The new gotcha about toHaveText normalisation is advice. It is accurate about
+#       the EXPECTED string, but readers take it to mean that the received name is compared exactly (see finding 1 fix).
+#   B5: covered_by += TC-UPLOAD-004 spec (C-KNOW-6); last_observed 2026-10-29 (C-KNOW-7); first_load_ms comment
+#       adds 1157 ms. scenario-map TC-UPLOAD-004 is `in_review` with the right files (settled: the orchestrator sets `done`).
+#   No blocking knowledge findings.
+#
+# Carried and NOT re-raised: the UploadPage.ts submit()/waitForUploadPost() pathname-only predicate (C-POM-4, r3/r4/TC-003).
+# This batch reuses submit(), so the drift now also covers TC-UPLOAD-004's status check. The finding itself is unchanged.
+
+findings:
+  - severity: blocker
+    file: tests/upload/TC-UPLOAD-004-unicode-file-name.spec.ts
+    line: 43
+    convention_ref: "C-ASSERT-1 / Checklist A6 (loose assertion = correctness bug)"
+    issue: >
+      toHaveText(EXPECTED_NAME) with a string normalises BOTH sides before comparing. In the installed Playwright
+      (node_modules/playwright-core/lib/coreBundle.js:562) that means text.replace(/[​­]/g, '').trim()
+      .replace(/\s+/g, ' '). JavaScript's \s matches U+00A0 and the other Unicode spaces, so the internal spaces
+      are NOT compared exactly. An echo of 'résumé final (v2).txt', 'résumé  final  (v2).txt' or a name with
+      an inserted soft hyphen or zero-width space would all pass. The comment at spec:40-42 says the opposite
+      ("toHaveText only normalises the template whitespace around the name ... internal spaces ... are unchanged").
+      Regex expectations are not normalised (ExpectedTextMatcher.matches skips normalize when a regex is given).
+    why_it_matters: >
+      Spaces are half of what TC-UPLOAD-004 tests (the title says "File names with spaces and non-ASCII characters
+      are preserved", and step 2 says "exactly as on disk"). Turning spaces into &nbsp; or collapsing them is a
+      classic file-name encoding bug, and the knowledge file explicitly observed U+0020 (and no U+00A0). The core
+      assertion cannot see that bug. not_generated[0] dropped the separate negative checks on the premise that the
+      exact toHaveText rejects every mangling. For whitespace that premise is false.
+    fix: >
+      Make the name check whitespace-exact while still tolerating the template whitespace recorded in knowledge
+      (textContent "\n    résumé final (v2).txt\n  "). Use a regex anchored on the whole textContent, built from the
+      single EXPECTED_NAME so that NFC stays pinned:
+      `const exactName = new RegExp('^\\s*' + EXPECTED_NAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$');`
+      `await expect(uploadPage.uploadedFiles).toHaveText(exactName);`
+      You may keep the string toHaveText first for its readable diff. Correct the comment at spec:40-42. Self-verify the fix:
+      (a) BEFORE the fix, invert EXPECTED_NAME's space to ' ' in the string assertion and record that it
+      PASSES (this proves the gap); (b) after the fix, the same inversion must FAIL; (c) revert and pass. Explorer
+      (not Codegen): change the gotcha's "whitespace normalisation does not change 'résumé final (v2).txt'" to say
+      that normalisation also applies to the received text, so an exact whitespace check needs a regex or innerText.
+
+  - severity: suggestion
+    file: tests/fixtures/index.ts
+    line: 13
+    convention_ref: "Checklist A8 (a stranger can tell what is going on from the code) / C-POM-4 (one way of doing each thing); batch-report accuracy is a rubric gap (conventions_silent_on)"
+    issue: >
+      The doc comment (index.ts:10-11) says the name is "Written with \u escapes so an editor cannot silently turn it
+      into NFD". Line 13 is a literal UTF-8 'résumé' (bytes 303 251, verified with od -c). Batch report
+      fixture_changes (:24-25) repeats the claim and quotes code that does not exist ('résumé ...'). The
+      same name is also defined twice in two different ways: escaped in the spec (:10) and literal in the fixture map.
+      The precondition (spec:20-21) checks the directory against EXPECTED_NAME only, so it does not guard the literal.
+    why_it_matters: >
+      Today the literal is NFC and correct, and any drift would fail loudly rather than pass falsely, so this is not a
+      correctness bug. But the comment advertises a protection that is absent, and the batch report describes code
+      that was not written. A reader cannot trust either one without running od.
+    fix: >
+      Change index.ts:13 to `unicodeNameTxt: path.join(__dirname, 'files', 'résumé final (v2).txt'),` so the
+      comment becomes true, and add one line to the precondition step:
+      `expect(path.basename(files.unicodeNameTxt), 'fixture path uses the NFC name').toBe(EXPECTED_NAME);`.
+      Correct batch report fixture_changes to describe the code as it actually is (or as fixed), and say how it was
+      checked (grep/od of the source line, not only of the directory listing).
+
+conventions_silent_on:
+  - "Unicode normalisation in expected strings: whether a spec must pin the observed form (NFC here) when the test case says only 'exactly as on disk', and whether non-ASCII literals must be written with \\u escapes. Ruled acceptable here because the knowledge observed NFC at disk, chooser and echo. Raised by Codegen."
+  - "Whether a spec may read the filesystem (fs.readdirSync) in a precondition step that guards test data rather than app behaviour. Ruled acceptable here (C-LOC-5 is about locators; C-IO-1 and C-AGENT-10 are met). Raised by Codegen."
+  - "C-ASSERT-1 permits toHaveText's whitespace normalisation where knowledge shows varying surrounding whitespace, but it does not say what to do when internal whitespace is part of the requirement (finding 1). A human may want to add: 'when spaces are part of the value under test, use an anchored regex or innerText'."
+  - "Accuracy of descriptive claims in batch reports and code comments (fixture_changes and the index.ts doc comment here). C-AGENT-4 covers self_verify runs only. Carried from TC-UPLOAD-002 r2 and TC-UPLOAD-001 r4."
+  - "Extra inversions beyond the one C-AGENT-4 requires (run_2b). Accepted as additional evidence. Related to the per-assertion falsifiability gap carried from TC-UPLOAD-002 r1 and TC-UPLOAD-003."
+  - "Carried, still open: definition of 'core outcome' in C-ASSERT-1; app origin under configurable BASE_URL; batch-report vs scenario-map `status` naming; `exact: true` on fixed-name locators; the purpose of first_load_ms; multi-outcome known-defect tests; stub status/body choice; CI retries for @known-defect; asserting layout with boundingBox(); page objects reading fixture bytes."
+
+meta_signal: >
+  (1) Batch-report statements that do not match the code or the runs have now appeared in a THIRD review log
+  (TC-UPLOAD-001 r4: an inference worded as an observation; TC-UPLOAD-002 r2: a stale knowledge_updated line; this
+  log: fixture_changes describes \u escapes that are not in the file). That is more than two (C-AGENT-9). Change the
+  Codegen prompt, not the code: "every statement in the batch report about code must be checked against the file
+  (quote the line or grep it); describe what was written, not what was intended". (2) C-ASSERT-1 is raised again
+  (now 5 logs), this time in a new form: toHaveText's whitespace normalisation hides changes to internal spaces. The
+  toHaveText/toHaveAccessibleName prompt line recommended since TC-UPLOAD-002 r1 is still not in agents/codegen-agent.md,
+  and it would not have caught this case anyway. Consider a rubric note on what toHaveText normalises. (3) Per-assertion
+  falsifiability (raised in TC-002 r1 and TC-003) shows up here a third time in practice: the inversion
+  chosen proved the accent side of "exactly" but not the whitespace side, which is where the gap was. That is more
+  than two, so C-AGENT-4 should require one inversion per distinct property that the test case's expected result names.
+
+---
+# ROUND 2 (appended 2026-10-29; round 1 above is left as written)
+round: 2
+reviewed: 2026-10-29
+test_case: TC-UPLOAD-004
+batch: reports/codegen-batch-2026-10-29-TC-UPLOAD-004.yaml (self_verify.round_2_review_fix)
+verdict: approved
+
+# Scope: the re-read untracked spec in full, `git diff` of knowledge/pages/upload.yaml, knowledge/scenario-map.yaml and
+# tests/fixtures/index.ts (unchanged since round 1), and the updated batch report.
+#
+# Reviewer's own runs (2026-10-29, local, --retries=0):
+#   npm run typecheck                                     -> clean
+#   npm run knowledge                                     -> YAML tabs OK; C-LOC-4 traceability OK
+#   npx playwright test --list --grep "@tc:TC-UPLOAD-004" -> Total: 1 test in 1 file, spec:23:7 (C-TC-2)
+#   npx playwright test --grep "@tc:TC-UPLOAD-004"        -> 1 passed (3.1s test / 3.9s total)
+#
+# Round 1 blocker 1 (C-ASSERT-1, toHaveText string-form whitespace normalisation): RESOLVED.
+#   Raw bytes checked with `sed -n Np | od -c`, because Codegen reported that its Edit tool turned \u escapes into literals:
+#     spec:10  ' r \ u 0 0 e 9 s u m \ u 0 0 e 9   f i n a l ...'  -> real é escapes, so NFC stays pinned in the source.
+#     spec:19  escapeRegExp = s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')  -> the standard escape set, ASCII only.
+#     spec:20  new RegExp('^[\\n ]*' + escapeRegExp(EXPECTED_NAME) + '[\\n ]*$')  -> bytes '^ [ \ \ n <space> ] *' and
+#              '[ \ \ n <space> ] * $'. The JS string gives the regex source ^[\n ]* ... [\n ]*$ (an escaped newline and
+#              a literal U+0020, with no U+00A0 or other non-ASCII byte). The only non-ASCII bytes left in the spec are in
+#              the comments at :6 and :53.
+#     spec:55  await expect(uploadPage.uploadedFiles).toHaveText(EXACT_NAME_TEXT);
+#   Semantics: the RegExp is anchored at both ends, so the whole textContent must match. The slack is limited to
+#   newline/U+0020 OUTSIDE the name, which is exactly the template wrapping recorded in knowledge (elements.uploaded_files,
+#   states.unicode_name_successful_submit: "\n    <name>\n  "). Inside the name every code unit is literal, and '(' ')'
+#   '.' are escaped. This is stricter than the \s* I suggested in round 1 (\s would also have accepted U+00A0/tab around
+#   the name), and that is acceptable. A future \r or tab in the template would fail loudly, not pass falsely. The comments
+#   at :12-18 and :50-54 now state the normalisation behaviour correctly.
+#   Self-verify of the fix (C-AGENT-4) is present and convincing, and follows the round-1 recipe: (a) U+00A0 inversion
+#   against the OLD string form PASSED (gap proven; bytes 302 240 confirmed by od; the voided '00a0' attempt is disclosed);
+#   (b1) fixed spec passes; (b2) U+00A0 inversion against the regex FAILED at spec:55:48 with the real toHaveText
+#   pattern/received message (the caveat that the NBSP renders as a space is honest, and the code points are given);
+#   (b3) '%20' inversion FAILED; (b4) restored (cmp IDENTICAL, grep 0) -> pass; gates are clean. My own run matches b4.
+#   Not rerunning TC-UPLOAD-001 is justified: only the TC-004 spec changed this round.
+#
+# Checklist A re-applied to the changed lines only: A3 (the template wrapping in the regex traces to knowledge), A5 (no
+# raw locator, no sleep, C-ASSERT-3 step kept), A6 (the core assertion now catches internal whitespace changes). Nothing
+# else in the spec changed.
+# Checklist B: the knowledge files are unchanged since round 1. Only the gotcha below is still open.
+#
+# Codegen's self-reported points, judged:
+#   1. not_generated[0] overclaim -> CONFIRMED, suggestion (finding r2-1).
+#   2. fixture_changes still claims \u escapes in index.ts -> CONFIRMED still false (index.ts:13 od -c: r 303 251 s u m
+#      303 251, a literal). This is round-1 finding 2, still open by design for the human. NOT re-raised as a new
+#      finding and its severity is not changed.
+#   3. upload.yaml:160 gotcha still says whitespace normalisation leaves the name unchanged -> CONFIRMED, suggestion for
+#      the Explorer (finding r2-2). Round 1 recorded no blocking knowledge finding, and that is not re-litigated.
+
+findings:
+  - severity: suggestion
+    file: reports/codegen-batch-2026-10-29-TC-UPLOAD-004.yaml
+    line: 119
+    convention_ref: "Gap in the rubric: accuracy of descriptive batch-report claims (conventions_silent_on, carried; round 1 meta_signal (1)). C-AGENT-5 is engaged because this is the not_generated rationale."
+    issue: >
+      not_generated[0] says the string toHaveText accepted "U+00A0, doubled spaces, U+00AD and U+200B (all passed; ...)".
+      Only U+00A0 was run (round_2_review_fix.a). The other three are inferred from normalizeWhiteSpace in
+      coreBundle.js:562, which the reviewer read in round 1, so the inference is very likely correct. But "all passed"
+      words it as a run result, and two sentences later the same entry says they "were not individually inverted". The
+      entry contradicts itself. Related: spec.grep_selection (:32) still quotes spec:13:7, and the test is now at
+      spec:23:7 (b1 notes the move, but the top-level field is stale).
+    why_it_matters: >
+      This is the third-log pattern flagged in round 1's meta_signal: the report states an inference as an observation.
+      A reader auditing coverage cannot tell which mangling was proven by a run. No test behaviour is affected.
+    fix: >
+      Reword to: "U+00A0 passed against the string form (round_2_review_fix.a). Doubled spaces, U+00AD and U+200B would
+      also pass according to normalizeWhiteSpace (coreBundle.js:562: strip U+200B/U+00AD, trim, collapse /\s+/), but these
+      were not run." Update spec.grep_selection to spec:23:7.
+
+  - severity: suggestion
+    file: knowledge/pages/upload.yaml
+    line: 160
+    convention_ref: "Checklist B4 / C-KNOW-4 (a gotcha must carry the correct fix); owner: Explorer, not Codegen (C-AGENT-1)"
+    issue: >
+      The gotcha still advises "Use toHaveText('<name>'), which normalises whitespace ... The name's internal single
+      spaces are plain U+0020, so whitespace normalisation does not change 'résumé final (v2).txt'." The last sentence is
+      literally true of the EXPECTED string. But toHaveText(string) also normalises the RECEIVED text, so the advice
+      gives no exact whitespace check (this was round 1 blocker 1, and round_2_review_fix.a proved it). This is round 1's
+      Explorer action, not yet applied.
+    why_it_matters: >
+      Codegen works from knowledge alone (C-AGENT-1). The next test that asserts a name with meaningful spaces would
+      follow this gotcha and reintroduce the round-1 blocker.
+    fix: >
+      Explorer: replace the last sentence with "toHaveText(string) normalises the received text as well (strips
+      U+200B/U+00AD, trims, collapses any \s run, including U+00A0, to one space), so it cannot detect a changed internal
+      space. When spaces are part of the value, use an anchored RegExp built from the escaped name, allowing only the
+      observed template wrapping ([\n ]*) at each end (as in the TC-UPLOAD-004 spec)."
+
+  # Carried, still open, not re-raised: round 1 finding 2 (tests/fixtures/index.ts:10-13 comment says \u escapes but
+  # line 13 is a literal; batch fixture_changes :22-26 repeats it; the precondition does not tie files.unicodeNameTxt to
+  # EXPECTED_NAME). The human decides. Also carried: the UploadPage.ts submit()/waitForUploadPost() pathname-only
+  # predicate (C-POM-4).
+
+conventions_silent_on:
+  - "Whether the round-1 regex shape (\\s*) or a stricter observed-whitespace class ([\\n ]*) is preferred for template wrapping. Codegen chose the stricter one and it traces to knowledge. Accepted. If C-ASSERT-1 gains the 'spaces part of the value -> anchored regex' note proposed in round 1, it could name this form."
+  - "Carried from round 1 unchanged: Unicode normalisation in expected strings; fs.readdirSync preconditions; C-ASSERT-1 and internal whitespace; batch-report and comment accuracy; extra inversions; and the older carried list."
+
+meta_signal: >
+  Round 1's meta_signal (1) shows up again within this same batch: after a fix round, not_generated[0] still words an
+  inference as a run result, and fixture_changes is still false. Codegen flagged both itself, so self-disclosure works,
+  but the Codegen prompt change recommended in round 1 ("check every statement about code or runs against the file or
+  the run; label inferences as inferences") has not been made yet. Round 1 (3) (one inversion per distinct property
+  named in the expected result) was followed voluntarily here (a/b2 whitespace, b3 encoding, run_2b accent), which shows
+  it is practical to make it a C-AGENT-4 rule.

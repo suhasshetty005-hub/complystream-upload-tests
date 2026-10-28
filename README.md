@@ -17,7 +17,7 @@ The HTML report is written to `playwright-report/`. Open it with `npm run report
 > should get, against a real defect on the page. See `reports/doc-gaps.md`.
 > To run only the passing tests: `npm run test:passing`.
 >
-> Because of that test, `npm test` ends with **"1 failed, 2 passed" and a non-zero exit code. That
+> Because of that test, `npm test` ends with **"1 failed, 3 passed" and a non-zero exit code. That
 > is expected**, not a broken setup.
 
 ## Results
@@ -27,6 +27,7 @@ The HTML report is written to `playwright-report/`. Open it with `npm run report
 | `tests/upload/TC-UPLOAD-001-upload-form.spec.ts` | TC-UPLOAD-001 | Choose `sample.txt` and click Upload. The POST returns 2xx, the heading is "File Uploaded!", and exactly `sample.txt` is shown. Choosing a file sends nothing. | ✅ pass |
 | `tests/upload/TC-UPLOAD-002-empty-submit.spec.ts` | TC-UPLOAD-002 | Click Upload with no file chosen. The page should show a validation message, not a server error. | ❌ **fails on purpose** |
 | `tests/upload/TC-UPLOAD-003-drag-drop.spec.ts` | TC-UPLOAD-003 | Drop `sample.txt` onto the drag-and-drop zone with a real `drop` event. It uploads without the Upload button, the zone shows the file, and the form is untouched. | ✅ pass |
+| `tests/upload/TC-UPLOAD-004-unicode-file-name.spec.ts` | TC-UPLOAD-004 | Upload `résumé final (v2).txt` with the file chooser. The POST returns 2xx and the name is echoed with exactly the same code points: no `%20`, `?`, mangled accents or changed spaces. | ✅ pass |
 
 **The deliberate failure (DEFECT-001).** Submitting with no file returns `POST /upload -> 500`
 with the heading "Internal Server Error", even though the page text is an ordinary validation
@@ -46,11 +47,10 @@ Run a single case with `npx playwright test --grep "@tc:TC-UPLOAD-003"`.
 
 ## What I couldn't cover, and what I'd need from you
 
-Ten test cases were written (`test-cases/`). Three are automated. These seven are not:
+Ten test cases were written (`test-cases/`). Four are automated. These six are not:
 
 | Case | Why it isn't automated | What I'd need from ComplyStream |
 |---|---|---|
-| TC-UPLOAD-004 File names with spaces / non-ASCII characters | Only the 4-hour cap; it is automatable as is. | Nothing. |
 | TC-UPLOAD-005 Only allowed file types are accepted | No type rule exists anywhere: no `accept` on the input, and `acceptedFiles: null` on the drop zone. Any assertion would be a requirement I invented. | The allowed types and extensions, and whether the server checks extension, MIME type or content. |
 | TC-UPLOAD-006 File size limits | No documented limit. The two paths differ: the drop zone has a 256 MB client limit, the form has none. Load-testing a shared public server is also inappropriate. | The specified limits, and an environment I'm allowed to load. |
 | TC-UPLOAD-007 The file is stored intact and can be retrieved | The page only echoes the file **name**. A green test proves "200 + name shown", not "file stored". | A download or API endpoint, or read access to storage. For a compliance product, also the audit-log entry an upload should produce. |
@@ -67,6 +67,8 @@ section's "Decisions needed"). The main ones:
   server answers, so the test relies on Dropzone's `dz-success` class.
 - **TC-003:** the test uses a synthetic `drop` event. A real drag from the desktop still needs a
   manual check.
+- **TC-004:** "exactly as on disk" names no Unicode form. The test pins NFC, as observed; whether
+  NFD is also acceptable is a product decision.
 
 ## How the tests were written: a four-agent pipeline
 

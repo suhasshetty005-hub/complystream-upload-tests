@@ -11,13 +11,19 @@
 # the zone). The File was built in-page from the exact 72 bytes of tests/fixtures/files/sample.txt
 # (read from disk, base64 Q29tcGx5U3RyZWFtIHVwbG9hZCB0ZXN0IGZpeHR1cmUuIEhhcm1sZXNzIHBsYWluIHRleHQsIHNhZmUgdG8gcHVibGlzaC4K).
 # Dropped twice on two fresh loads: dragenter+dragover+drop, then drop alone. Both uploaded.
+# Fifth session, 2026-10-29 (scope: TC-UPLOAD-004 steps 1-2, file-chooser form flow only, no drop):
+# clicked 'Choose File', passed the committed fixture
+# C:\Users\suhas\complystream-upload-tests\tests\fixtures\files\résumé final (v2).txt (89 bytes; the
+# on-disk name bytes are 72 c3a9 73 75 6d c3a9 20 ... i.e. NFC) to browser_file_upload, which
+# accepted it without altering the name, then clicked 'Upload'. Recorded files[0].name before
+# submit and #uploaded-files after submit, with code points (see states.unicode_name_*).
 
 page: upload
 title: File Uploader
 url: /upload
-last_observed: 2026-10-28
+last_observed: 2026-10-29
 observed_on: "https://the-internet.herokuapp.com (no version string visible; footer says 'Powered by Elemental Selenium and Sauce Labs')"
-first_load_ms: 5606  # The largest first load seen. Navigation Timing duration of the first GET /upload in the fourth session, 2026-10-28 (responseStart 773 ms, 200; most of the time was after the first byte). Earlier sessions measured 2823 ms (responseStart 776 ms) and 865 ms (responseStart 708 ms). Whether any hit a cold dyno is unknown, so this is not a confirmed cold-start figure.
+first_load_ms: 5606  # The largest first load seen. Navigation Timing duration of the first GET /upload in the fourth session, 2026-10-28 (responseStart 773 ms, 200; most of the time was after the first byte). Earlier sessions measured 2823 ms (responseStart 776 ms) and 865 ms (responseStart 708 ms); the fifth session (2026-10-29) measured 1157 ms (responseStart 794 ms, 200). Whether any hit a cold dyno is unknown, so this is not a confirmed cold-start figure.
 
 elements:
   - name: heading
@@ -84,7 +90,7 @@ elements:
     locator: "page.locator('#uploaded-files')"
     why: "The snapshot shows it only as an unnamed 'generic' with the text sample.txt, so it has no role or accessible name to target (C-LOC-1 not possible). It has a stable id, so fall back to the DOM id (C-LOC-2)."
     attributes: 'id="uploaded-files" class="panel text-center"; 0 child elements; text node only'
-    notes: "textContent is JSON \"\\n    sample.txt\\n  \" (newline + 4 spaces before, newline + 2 spaces after); innerText is exactly 'sample.txt'. No other file names are present. Raw textContent equality fails; use toHaveText('sample.txt'), which normalises whitespace, or trim first. Only present after a successful submit."
+    notes: "textContent is JSON \"\\n    sample.txt\\n  \" (newline + 4 spaces before, newline + 2 spaces after); innerText is exactly 'sample.txt'. No other file names are present. Raw textContent equality fails; use toHaveText('sample.txt'), which normalises whitespace, or trim first. Only present after a successful submit. With the fixture 'résumé final (v2).txt' the same template wrapping applies (textContent JSON \"\\n    résumé final (v2).txt\\n  \", innerText exactly 'résumé final (v2).txt', still 0 child elements); the snapshot shows generic \"résumé final (v2).txt\". See states.unicode_name_successful_submit."
 
   - name: empty_submit_error_heading
     locator: "page.getByRole('heading', { name: 'Internal Server Error', level: 3 })"
@@ -125,6 +131,16 @@ states:
     request: "POST https://the-internet.herokuapp.com/upload -> 200 (full-page form submit; the new document's Navigation Timing entry has type 'navigate', responseStatus 200, duration 297 ms)"
     observed: "URL after submit is https://the-internet.herokuapp.com/upload (unchanged). Page title 'The Internet'. #content holds only <div class=\"example\"> containing <h3>File Uploaded!</h3> and <div id=\"uploaded-files\" class=\"panel text-center\">, whose innerText is exactly 'sample.txt' (textContent has surrounding template whitespace; see elements.uploaded_files). No other file names. No other upload-related elements: 0 input[type=file], 0 <form>, no #drag-drop-upload, no Upload button, no back link."
 
+  - name: unicode_name_file_chosen_not_submitted
+    trigger: "Click 'Choose File', then browser_file_upload (fileChooser.setFiles) with C:\\Users\\suhas\\complystream-upload-tests\\tests\\fixtures\\files\\résumé final (v2).txt (fifth session, 2026-10-29)"
+    request: "none to the-internet.herokuapp.com. The only new request was the known failing Optimizely 'engagement' beacon (net::ERR_NAME_NOT_RESOLVED)."
+    observed: "browser_file_upload accepted the path and did not alter the name. #file-upload files.length 1; files[0].name 'résumé final (v2).txt' (length 21; code points U+0072 U+00E9 U+0073 U+0075 U+006D U+00E9 U+0020 U+0066 U+0069 U+006E U+0061 U+006C U+0020 U+0028 U+0076 U+0032 U+0029 U+002E U+0074 U+0078 U+0074; name.normalize('NFC') === name true, normalize('NFD') === name false, so the accent is U+00E9 precomposed, matching the NFC name on disk); size 89; type 'text/plain'; value 'C:\\fakepath\\résumé final (v2).txt'. Native text beside 'Choose File' reads 'résumé final (v2).txt' (screenshot only). input.dz-hidden-input files.length 0. URL stays /upload."
+
+  - name: unicode_name_successful_submit
+    trigger: "With 'résumé final (v2).txt' chosen through #file-upload, click 'Upload' (getByRole('button', { name: 'Upload' }))"
+    request: "POST https://the-internet.herokuapp.com/upload -> 200 (full-page form submit; Navigation Timing type 'navigate', responseStatus 200, duration 374 ms). Only GET /upload -> 200 and this POST were seen to /upload. Request body and headers not captured."
+    observed: "URL stays https://the-internet.herokuapp.com/upload. Only heading is <h3>File Uploaded!</h3>. #uploaded-files outerHTML exactly <div id=\"uploaded-files\" class=\"panel text-center\">\\n    résumé final (v2).txt\\n  </div> (0 child elements). innerText 'résumé final (v2).txt' (JSON \"résumé final (v2).txt\"), length 21, code points identical to files[0].name above (both é are U+00E9; spaces U+0020; parentheses U+0028/U+0029); innerText.normalize('NFC') === innerText true, NFD false. textContent JSON \"\\n    résumé final (v2).txt\\n  \". Checked in-page: innerText === 'résumé final (v2).txt' true; textContent.trim() === it true; whitespace-collapsed textContent === it true; textContent contains '%20' false, '?' false, 'Ã' (UTF-8-as-Latin-1 mojibake) false, U+00A0 false. document.characterSet 'UTF-8', contentType 'text/html'. Console: only the known Optimizely ERR_NAME_NOT_RESOLVED and /favicon.ico 404 errors."
+
   - name: empty_submit
     trigger: "Click 'Upload' with no file chosen"
     request: "POST https://the-internet.herokuapp.com/upload -> 500 (observed twice: first in the TC-UPLOAD-001 session, again on 2026-10-27 in the TC-UPLOAD-002 session, where the new document's Navigation Timing entry had type 'navigate', responseStatus 500, duration 480 ms). The second observation matches the first."
@@ -141,7 +157,8 @@ gotchas:
   - "An empty submit returns HTTP 500, not a 4xx or an inline validation message. A test asserting only the page text would miss the 500, and a test asserting only status would miss the message. Assert both."
   - "Success and failure both end on URL /upload (POST /upload -> 200 vs -> 500). A URL assertion proves nothing. Assert the POST /upload response status plus the 'File Uploaded!' heading."
   - "On the empty-submit page the only text containing 'File Uploader' is the link 'Back to the File Uploader'. A loose getByText('File Uploader') matches that link, so it would wrongly 'prove' the user is still on the form. Use getByRole('heading', { name: 'File Uploader' }) (absent on the error page) or #file-upload (absent too)."
-  - "#uploaded-files textContent includes template whitespace around 'sample.txt'. Use toHaveText('sample.txt'), which normalises whitespace, or trim before an exact comparison. Do not compare raw textContent."
+  - "#uploaded-files textContent includes template whitespace around the file name (seen for 'sample.txt' and 'résumé final (v2).txt'). Use toHaveText('<name>'), which normalises whitespace, or trim before an exact comparison. Do not compare raw textContent. The name's internal single spaces are plain U+0020, so whitespace normalisation does not change 'résumé final (v2).txt'."
+  - "Unicode normalisation: the app echoed 'résumé final (v2).txt' with é as precomposed U+00E9 (NFC), the same as the on-disk name and files[0].name. Write the expected string in the spec as NFC (or build it with '\\u00e9'); an NFD literal (e + U+0301) would look identical but fail toHaveText. The fixture's filename on disk was NFC on this Windows checkout (bytes c3a9 for each é); behaviour with a filesystem that returns NFD is NOT YET OBSERVED."
   - "The success page has no link back to the form and no file input. A test that uploads twice must navigate to /upload again."
   - "The empty drop zone and the 'No file chosen' / chosen-file-name text do not appear in the accessibility snapshot. Use the DOM (#file-upload files) or screenshots for them. After a drop, the zone and its preview do appear, but only as unnamed generics, so role locators still cannot target them."
   - "The drop path is Dropzone's own XHR, NOT the form. setInputFiles / browser_file_upload on input.dz-hidden-input, or clicking the zone to open a chooser, exercise different code (C-IO-3). Produce a real drop: a DataTransfer carrying a File, dispatched as a 'drop' event on #drag-drop-upload (dragenter/dragover optional; drop alone worked)."
@@ -156,14 +173,17 @@ doc_discrepancies:
   - "TC-UPLOAD-001 step 1 calls the file chooser 'Choose File'. That label is the native browser button text, not page markup (no <label>, no aria-label), so the test case's wording depends on the browser."
 
 not_yet_observed:
-  - "The POST /upload request body and response headers on a successful submit (only method, URL and status were recorded)."
+  - "The POST /upload request body and response headers on a successful submit (only method, URL and status were recorded). For 'résumé final (v2).txt' the multipart Content-Disposition filename encoding (raw UTF-8 vs filename*) was not captured; only the rendered result was."
+  - "Unicode-name upload via drag-and-drop, and a fixture whose on-disk name is NFD: neither was exercised (out of scope for TC-UPLOAD-004 steps 1-2; no NFD fixture is committed)."
+  - "Unicode-name upload in Firefox or WebKit: only the MCP Chromium browser was used."
   - "Drag-and-drop request headers and body: the multipart Content-Type and the exact form field sent by Dropzone were not captured (only the configured paramName 'file' and the server's success response were seen)."
   - "Drag-and-drop with a real OS/mouse drag (Playwright dragTo from an external file is not possible; only a synthetic DragEvent with a DataTransfer was used). Also: dropping two files, dropping after a form upload, a drop that the server rejects (dz-error state), and WebKit/Firefox behaviour."
   - "The exact Playwright evaluateHandle + locator.dispatchEvent('drop', { dataTransfer }) form was not run in this session; the MCP run used page.evaluate with new DragEvent on the zone element."
   - "Behaviour with multiple files, large files, or restricted types: out of scope, and no such fixtures are committed."
-  - "A confirmed cold-start load time. First loads of 865 ms and 2823 ms were seen; either may have hit an already-warm dyno."
+  - "A confirmed cold-start load time. First loads of 865 ms, 1157 ms, 2823 ms and 5606 ms were seen; any may have hit an already-warm dyno."
 
 covered_by:
   - "tests/upload/TC-UPLOAD-001-upload-form.spec.ts (TC-UPLOAD-001)"
   - "tests/upload/TC-UPLOAD-002-empty-submit.spec.ts (TC-UPLOAD-002, @known-defect DEFECT-001)"
   - "tests/upload/TC-UPLOAD-003-drag-drop.spec.ts (TC-UPLOAD-003)"
+  - "tests/upload/TC-UPLOAD-004-unicode-file-name.spec.ts (TC-UPLOAD-004)"
